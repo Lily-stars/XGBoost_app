@@ -938,11 +938,12 @@ elif selected == "ℹ️ 关于系统":
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 12px;'>
-    <p>🏥 造血干细胞移植患儿再入院风险预测系统 | 版本 v1.1.0</p>
-    <p>⚠️ 免责声明：本系统仅供医疗专业人士参考，不能替代医学诊断</p>
- 
+    <p>造血干细胞移植患儿再入院风险预测系统 | 版本 v1.1.0</p>
+    <p>免责声明：本系统仅供医疗专业人士参考，不能替代医学诊断</p>
 </div>
 """, unsafe_allow_html=True)
+
+
 
 
 
