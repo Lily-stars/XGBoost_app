@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 # ============================================================================
-# predictor.py (修复版 v1.4.0 - 无需 feature_names.pkl)
+# predictor.py (修复版 v1.4.1 - 完全兼容Streamlit Cloud)
 # ============================================================================
 
 import joblib
@@ -12,7 +13,7 @@ import matplotlib.font_manager as fm
 import warnings
 import streamlit as st
 from streamlit_option_menu import option_menu
-import seaborn as sns  # ⭐ 添加这一行（移到顶部）
+import seaborn as sns
 
 # 中文字体配置
 matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
@@ -20,6 +21,7 @@ matplotlib.rcParams['axes.unicode_minus'] = False
 matplotlib.rcParams['font.size'] = 11
 
 warnings.filterwarnings('ignore')
+
 
 
 
@@ -939,11 +941,8 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 12px;'>
     <p>造血干细胞移植患儿再入院风险预测系统 | 版本 v1.1.0</p>
-    <p>免责声明：本系统仅供医疗专业人士参考，不能替代医学诊断</p>
+    <p>免责声明: 本系统仅供医疗专业人士参考,不能替代医学诊断</p>
 </div>
 """, unsafe_allow_html=True)
-
-
-
 
 
