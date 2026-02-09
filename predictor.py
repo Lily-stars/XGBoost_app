@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import shap
 import matplotlib.pyplot as plt
-from lime.lime_tabular import LimeTabularExplainer
+# from lime.lime_tabular import LimeTabularExplainer  # ❌ 已删除 LIME
 import warnings
 import streamlit as st
 from streamlit_option_menu import option_menu
@@ -444,47 +444,59 @@ if selected == "🏠 预测中心":
             """)
 
         # ============================================================================
-        # 8. LIME 局部解释性分析
+        # 8. SHAP 特征解释（替代 LIME）
         # ============================================================================
 
         st.markdown("---")
-        st.markdown("### 🔬 模型解释性分析 (LIME)")
+        st.markdown("### 🔬 模型解释性分析 (SHAP)")
 
-        st.info("LIME (Local Interpretable Model-agnostic Explanations) 帮助理解模型为什么做出这个预测")
+        st.info("🎯 SHAP (SHapley Additive exPlanations) 提供模型预测的可解释性分析")
 
         try:
             if X_test is not None:
-                # 初始化LIME解释器
-                explainer = LimeTabularExplainer(
-                    X_test.values,
-                    feature_names=X_test.columns.tolist(),
-                    class_names=['低风险', '高风险'],
-                    mode='classification',
-                    random_state=42
-                )
-
-                # 生成解释
-                exp = explainer.explain_instance(
-                    input_encoded.values[0],
-                    model.predict_proba,
-                    num_features=10
-                )
-
-                # 绘制LIME解释图
-                fig_lime = exp.as_pyplot_figure()
-                st.pyplot(fig_lime, use_container_width=True)
+                # 初始化SHAP解释器
+                explainer = shap.TreeExplainer(model)
+                
+                # 生成SHAP值
+                shap_values = explainer.shap_values(input_encoded)
+                
+                # 如果是二分类，shap_values是列表，取正类的值
+                if isinstance(shap_values, list):
+                    shap_values_for_plot = shap_values[1]
+                else:
+                    shap_values_for_plot = shap_values
+                
+                # 创建力图
+                fig_shap = plt.figure(figsize=(12, 6))
+                
+                # 使用matplotlib绘制特征重要性
+                feature_importance = np.abs(shap_values_for_plot).mean(axis=0)
+                feature_names = input_encoded.columns.tolist()
+                
+                # 获取top 10特征
+                top_indices = np.argsort(feature_importance)[-10:][::-1]
+                
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.barh(range(len(top_indices)), feature_importance[top_indices], color='#1f77b4')
+                ax.set_yticks(range(len(top_indices)))
+                ax.set_yticklabels([feature_names[i] for i in top_indices])
+                ax.set_xlabel('平均SHAP值的绝对值', fontsize=11, fontweight='bold')
+                ax.set_title('Top 10 特征重要性 (SHAP)', fontsize=12, fontweight='bold', pad=10)
+                ax.invert_yaxis()
+                
+                st.pyplot(fig, use_container_width=True)
                 plt.close()
 
                 st.markdown("""
-                **LIME解释说明：**
+                **SHAP解释说明：**
                 - 图表显示对预测最有影响的10个特征
-                - 绿色表示支持低风险预测的特征
-                - 红色表示支持高风险预测的特征
-                - 数值大小表示特征的影响程度
+                - 数值越大表示该特征对预测的影响越大
+                - 有助于理解模型的决策逻辑
                 """)
 
         except Exception as e:
-            st.warning(f"LIME分析暂时不可用: {str(e)}")
+            st.warning(f"⚠️ SHAP分析出错: {str(e)}")
+            st.info("💡 这是正常的，模型仍然可以正常进行预测")
 
         # ============================================================================
         # 9. 输入特征汇总表
@@ -793,7 +805,7 @@ elif selected == "ℹ️ 关于系统":
     - **机器学习**：XGBoost, Scikit-learn
     - **数据处理**：Pandas, NumPy
     - **可视化**：Matplotlib, Seaborn
-    - **模型解释**：LIME, SHAP
+    - **模型解释**：SHAP（已升级，替代LIME）
 
     #### ⚖️ 法律声明
 
@@ -803,6 +815,7 @@ elif selected == "ℹ️ 关于系统":
     - 预测结果不构成医学诊断或治疗建议
     - 医生应基于个人专业知识和临床经验做出最终决策
     - 对于高风险患者，应加强监测和随访
+    - 如预测不符合临床直觉，应进一步评估
     - 使用本系统导致的任何后果，用户自行承担责任
     - 系统开发者和运营方不承担任何法律责任
 
@@ -815,9 +828,10 @@ elif selected == "ℹ️ 关于系统":
 
     #### 📅 版本信息
 
-    - **系统版本**：v1.0.0
+    - **系统版本**：v1.1.0 (已升级)
     - **最后更新**：2026年2月
     - **模型版本**：XGBoost v1.5+
+    - **解释方法**：SHAP (替代LIME以实现Python 3.13兼容性)
 
     ---
 
@@ -832,7 +846,7 @@ elif selected == "ℹ️ 关于系统":
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 12px;'>
-    <p>🏥 造血干细胞移植患儿再入院风险预测系统 | 版本 v1.0.0</p>
+    <p>🏥 造血干细胞移植患儿再入院风险预测系统 | 版本 v1.1.0</p>
     <p>⚠️ 免责声明：本系统仅供医疗专业人士参考，不能替代医学诊断</p>
     <p>© 2026 医疗AI系统团队 | 保留所有权利</p>
 </div>
