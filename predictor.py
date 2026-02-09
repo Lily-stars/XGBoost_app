@@ -27,7 +27,7 @@ warnings.filterwarnings('ignore')
 
 st.set_page_config(
     page_title="造血干细胞移植患儿再入院预测模型",
-    page_icon="🏥",
+    page_icon="hospital",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -76,18 +76,18 @@ def load_model():
         feature_names = model.get_booster().feature_names
         
         if feature_names is None:
-            st.error("❌ 模型中未找到特征名称！")
+            st.error("错误: 模型中未找到特征名称!")
             st.error("请确保您的模型是用有效的特征名保存的")
             st.stop()
         
         return model, feature_names
     
     except FileNotFoundError:
-        st.error("❌ 错误：找不到 'best_xgboost_model.pkl' 文件")
+        st.error("错误: 找不到 'best_xgboost_model.pkl' 文件")
         st.error("请确保模型文件在应用目录中")
         st.stop()
     except Exception as e:
-        st.error(f"❌ 模型加载失败: {e}")
+        st.error(f"模型加载失败: {e}")
         import traceback
         st.error(traceback.format_exc())
         st.stop()
@@ -167,13 +167,13 @@ def prepare_input_for_prediction(
     """
     将用户输入转换为模型可以接受的格式
     
-    步骤：
+    步骤:
     1. 创建原始数据DataFrame
     2. 进行One-Hot编码
     3. 严格对齐到模型期望的特征列表
     """
     
-    # 步骤1：创建原始数据
+    # 步骤1: 创建原始数据
     raw_data = pd.DataFrame({
         '中性粒细胞植入时间': [neutrophil_time],
         '出院时淋巴细胞绝对值': [lymphocyte_value],
@@ -185,7 +185,7 @@ def prepare_input_for_prediction(
         'HLA相合度': [hla_code]
     })
     
-    # 步骤2：One-Hot编码
+    # 步骤2: One-Hot编码
     encoded_data = pd.get_dummies(
         raw_data,
         columns=categorical_features,
@@ -193,7 +193,7 @@ def prepare_input_for_prediction(
         dtype=int
     )
     
-    # 步骤3：特征对齐
+    # 步骤3: 特征对齐
     # 创建一个与模型期望完全一致的DataFrame
     aligned_data = pd.DataFrame(
         0, 
@@ -242,17 +242,17 @@ def prepare_batch_input_for_prediction(
 # 4. 页面标题和导航
 # ============================================================================
 
-st.markdown("<h1 style='text-align: center; color: #1f77b4;'>🏥 造血干细胞移植患儿再入院风险预测系统</h1>",
+st.markdown("<h1 style='text-align: center; color: #1f77b4;'>造血干细胞移植患儿再入院风险预测系统</h1>",
             unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #666;'>基于XGBoost机器学习模型的临床决策支持工具</p>",
             unsafe_allow_html=True)
 
 # 侧边栏导航
 with st.sidebar:
-    st.markdown("### 📋 导航菜单")
+    st.markdown("### 导航菜单")
     selected = option_menu(
         menu_title=None,
-        options=["🏠 预测中心", "📊 批量预测", "📈 模型说明", "🔍 特征分析", "ℹ️ 关于系统"],
+        options=["预测中心", "批量预测", "模型说明", "特征分析", "关于系统"],
         icons=["house", "file-earmark", "bar-chart", "search", "info-circle"],
         menu_icon="cast",
         default_index=0
@@ -260,16 +260,16 @@ with st.sidebar:
     
     # 调试模式开关
     st.markdown("---")
-    st.session_state.debug_mode = st.checkbox("🐛 调试模式")
+    st.session_state.debug_mode = st.checkbox("调试模式")
 
 # ============================================================================
-# 页面1：预测中心（单个患者预测）
+# 页面1: 预测中心（单个患者预测）
 # ============================================================================
 
-if selected == "🏠 预测中心":
+if selected == "预测中心":
 
     st.markdown("---")
-    st.markdown("### 📝 患者信息输入")
+    st.markdown("### 患者信息输入")
 
     col1, col2 = st.columns(2)
 
@@ -283,7 +283,7 @@ if selected == "🏠 预测中心":
         )
 
         lymphocyte_value = st.number_input(
-            "出院时淋巴细胞绝对值 (×10⁹/L)",
+            "出院时淋巴细胞绝对值 (x10^9/L)",
             min_value=0.0, max_value=10.0, value=1.0, step=0.1,
             help="出院时淋巴细胞的绝对计数值"
         )
@@ -341,7 +341,7 @@ if selected == "🏠 预测中心":
     col_predict, col_space = st.columns([1, 2])
 
     with col_predict:
-        predict_button = st.button("🔮 进行预测", key="predict_btn", use_container_width=True)
+        predict_button = st.button("进行预测", key="predict_btn", use_container_width=True)
 
     if predict_button:
         try:
@@ -360,26 +360,26 @@ if selected == "🏠 预测中心":
             
             # 调试信息
             if st.session_state.debug_mode:
-                st.info("🐛 调试信息")
+                st.info("调试信息")
                 st.write(f"输入特征数: {len(prediction_input.columns)}")
                 st.write(f"模型期望特征数: {len(expected_features)}")
                 st.write(f"特征列表: {list(prediction_input.columns)}")
             
             # 验证特征
             if len(prediction_input.columns) != len(expected_features):
-                st.error(f"❌ 特征数量不匹配！期望: {len(expected_features)}, 实际: {len(prediction_input.columns)}")
+                st.error(f"特征数量不匹配! 期望: {len(expected_features)}, 实际: {len(prediction_input.columns)}")
                 st.stop()
             
             if set(prediction_input.columns) != set(expected_features):
                 missing = set(expected_features) - set(prediction_input.columns)
                 extra = set(prediction_input.columns) - set(expected_features)
                 if missing:
-                    st.error(f"❌ 缺失特征: {missing}")
+                    st.error(f"缺失特征: {missing}")
                 if extra:
-                    st.error(f"❌ 多余特征: {extra}")
+                    st.error(f"多余特征: {extra}")
                 st.stop()
             
-            st.success(f"✅ 数据准备完成，特征数量: {len(prediction_input.columns)}")
+            st.success(f"数据准备完成,特征数量: {len(prediction_input.columns)}")
             
             # 进行预测
             predicted_class = model.predict(prediction_input)[0]
@@ -390,13 +390,13 @@ if selected == "🏠 预测中心":
             # ============================================================================
 
             st.markdown("---")
-            st.markdown("### 🎯 预测结果")
+            st.markdown("### 预测结果")
 
             # 风险等级显示
             if predicted_class == 1:
                 st.markdown("""
                 <div class='prediction-box-high'>
-                    <h2 style='color: #cc0000; margin: 0;'>⚠️ 高风险</h2>
+                    <h2 style='color: #cc0000; margin: 0;'>警告: 高风险</h2>
                     <p style='font-size: 18px; margin: 10px 0 0 0;'>
                         患儿在出院后30天内<b>再入院风险较高</b>
                     </p>
@@ -406,7 +406,7 @@ if selected == "🏠 预测中心":
             else:
                 st.markdown("""
                 <div class='prediction-box-low'>
-                    <h2 style='color: #00aa00; margin: 0;'>✅ 低风险</h2>
+                    <h2 style='color: #00aa00; margin: 0;'>确认: 低风险</h2>
                     <p style='font-size: 18px; margin: 10px 0 0 0;'>
                         患儿在出院后30天内<b>再入院风险较低</b>
                     </p>
@@ -415,7 +415,7 @@ if selected == "🏠 预测中心":
                 risk_color = "#51cf66"
 
             # 概率值详细展示
-            st.markdown("#### 📊 风险概率分布")
+            st.markdown("#### 风险概率分布")
 
             col_prob1, col_prob2 = st.columns(2)
 
@@ -432,7 +432,7 @@ if selected == "🏠 预测中心":
                 )
 
             # 概率进度条
-            st.write("**风险概率可视化：**")
+            st.write("**风险概率可视化:**")
             fig_prob, ax_prob = plt.subplots(figsize=(12, 2))
 
             risk_prob = predicted_proba[1]
@@ -462,89 +462,89 @@ if selected == "🏠 预测中心":
             # ============================================================================
 
             st.markdown("---")
-            st.markdown("### 💡 个性化临床建议")
+            st.markdown("### 个性化临床建议")
 
             probability = predicted_proba[predicted_class] * 100
 
             if predicted_class == 1:
                 st.error(f"""
-                ### ⚠️ 高风险患者 (风险概率: {probability:.1f}%)
+### 警告: 高风险患者 (风险概率: {probability:.1f}%)
 
-                **建议措施：**
+**建议措施:**
 
-                1. **加强出院后随访**
-                   - 出院后 **1周内** 进行首次随访
-                   - 建议采用电话随访 + 门诊复诊相结合的方式
-                   - 密切关注体温、感染征象及移植物抗宿主病(GVHD)表现
+**1. 加强出院后随访**
+   - 出院后 1周内 进行首次随访
+   - 建议采用电话随访 + 门诊复诊相结合的方式
+   - 密切关注体温、感染征象及移植物抗宿主病(GVHD)表现
 
-                2. **严格的药物管理**
-                   - **严格遵医嘱服用免疫抑制剂**，切勿擅自停药或改量
-                   - 规范预防性抗菌/抗病毒/抗真菌药物应用
-                   - 建立服药日记，避免漏服
+**2. 严格的药物管理**
+   - 严格遵医嘱服用免疫抑制剂,切勿擅自停药或改量
+   - 规范预防性抗菌/抗病毒/抗真菌药物应用
+   - 建立服药日记,避免漏服
 
-                3. **感染防控与隔离**
-                   - 严格执行保护性隔离，避免接触呼吸道感染者
-                   - 居家环境定期消毒，指导家属做好手卫生
-                   - 监测血常规及C反应蛋白等感染指标
+**3. 感染防控与隔离**
+   - 严格执行保护性隔离,避免接触呼吸道感染者
+   - 居家环境定期消毒,指导家属做好手卫生
+   - 监测血常规及C反应蛋白等感染指标
 
-                4. **精细化营养支持**
-                   - 执行 **洁净饮食(低菌饮食)**，食物必须彻底煮熟
-                   - 建议高蛋白、易消化食物，避免生冷、隔夜饭菜
-                   - 监测体重变化，警惕短期内体重急剧下降
+**4. 精细化营养支持**
+   - 执行 洁净饮食(低菌饮食),食物必须彻底煮熟
+   - 建议高蛋白、易消化食物,避免生冷、隔夜饭菜
+   - 监测体重变化,警惕短期内体重急剧下降
 
-                5. **紧急应对 (红旗征)**
-                   - 明确紧急联系人及夜间急诊流程
-                   - **出现以下情况立即就医：**
-                     • 体温 >38.0℃或出现寒战
-                     • 严重腹泻(次数增多/量大)或便血
-                     • 持续恶心呕吐影响进食
-                     • 皮疹范围扩大或伴有水泡
-                     • 气促、呼吸困难或血氧下降
-                """)
+**5. 紧急应对 (红旗征)**
+   - 明确紧急联系人及夜间急诊流程
+   - 出现以下情况立即就医:
+     • 体温 >38.0℃或出现寒战
+     • 严重腹泻(次数增多/量大)或便血
+     • 持续恶心呕吐影响进食
+     • 皮疹范围扩大或伴有水泡
+     • 气促、呼吸困难或血氧下降
+""")
 
             else:
                 st.success(f"""
-                ### ✅ 低风险患者 (风险概率: {probability:.1f}%)
+### 确认: 低风险患者 (风险概率: {probability:.1f}%)
 
-                **建议措施：**
+**建议措施:**
 
-                1. **常规随访计划**
-                   - 出院后按医嘱进行首次门诊随访
-                   - 后续按照标准方案定期复查
-                   - 保持电话联系畅通，定期汇报患儿状况
+**1. 常规随访计划**
+   - 出院后按医嘱进行首次门诊随访
+   - 后续按照标准方案定期复查
+   - 保持电话联系畅通,定期汇报患儿状况
 
-                2. **药物依从性**
-                   - 继续按时服用抗排异药物和预防性药物
-                   - 了解药物常见副作用，如有不适及时反馈
+**2. 药物依从性**
+   - 继续按时服用抗排异药物和预防性药物
+   - 了解药物常见副作用,如有不适及时反馈
 
-                3. **生活与防护**
-                   - 保持良好的个人卫生，勤洗手
-                   - 免疫功能完全重建前，避免去人群密集场所
-                   - 外出时务必规范佩戴口罩
+**3. 生活与防护**
+   - 保持良好的个人卫生,勤洗手
+   - 免疫功能完全重建前,避免去人群密集场所
+   - 外出时务必规范佩戴口罩
 
-                4. **营养与康复**
-                   - 均衡饮食，适量补充维生素，促进身体恢复
-                   - 避免食用生食（如生鱼片、半熟蛋）
-                   - 循序渐进增加活动量，避免过度疲劳
+**4. 营养与康复**
+   - 均衡饮食,适量补充维生素,促进身体恢复
+   - 避免食用生食(如生鱼片、半熟蛋)
+   - 循序渐进增加活动量,避免过度疲劳
 
-                5. **持续监测**
-                   - 虽然风险较低，仍需警惕迟发性排异反应
-                   - 定期监测血药浓度及肝肾功能
-                   - 若出现发热或不明原因不适，应及时就诊
-                """)
+**5. 持续监测**
+   - 虽然风险较低,仍需警惕迟发性排异反应
+   - 定期监测血药浓度及肝肾功能
+   - 若出现发热或不明原因不适,应及时就诊
+""")
 
             # ============================================================================
             # SHAP 特征解释
             # ============================================================================
 
             st.markdown("---")
-            st.markdown("### 🔬 模型解释性分析 (SHAP)")
+            st.markdown("### 模型解释性分析 (SHAP)")
 
             try:
                 explainer = shap.TreeExplainer(model)
                 shap_values = explainer.shap_values(prediction_input)
                 
-                # 如果是二分类，取正类的SHAP值
+                # 如果是二分类,取正类的SHAP值
                 if isinstance(shap_values, list):
                     shap_values_for_plot = shap_values[1]
                 else:
@@ -569,17 +569,17 @@ if selected == "🏠 预测中心":
                 st.pyplot(fig, use_container_width=True)
                 plt.close()
 
-                st.info("💡 SHAP分析显示对本次预测影响最大的10个特征")
+                st.info("SHAP分析显示对本次预测影响最大的10个特征")
 
             except Exception as e:
-                st.warning(f"⚠️ SHAP分析出现问题: {str(e)}")
+                st.warning(f"SHAP分析出现问题: {str(e)}")
 
             # ============================================================================
             # 输入特征汇总表
             # ============================================================================
 
             st.markdown("---")
-            st.markdown("### 📋 输入特征汇总")
+            st.markdown("### 输入特征汇总")
 
             summary_data = {
                 '特征类型': ['连续变量'] * 3 + ['分类变量'] * 5,
@@ -595,7 +595,7 @@ if selected == "🏠 预测中心":
                 ],
                 '输入值': [
                     f"{neutrophil_time} 天",
-                    f"{lymphocyte_value} ×10⁹/L",
+                    f"{lymphocyte_value} x10^9/L",
                     f"{hospitalization_days} 天",
                     diagnosis,
                     donor_source,
@@ -609,46 +609,46 @@ if selected == "🏠 预测中心":
             st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
         except Exception as e:
-            st.error(f"❌ 预测错误: {str(e)}")
+            st.error(f"预测错误: {str(e)}")
             st.error("请确保所有输入特征都正确填写")
             import traceback
             st.error(traceback.format_exc())
 
 # ============================================================================
-# 页面2：批量预测
+# 页面2: 批量预测
 # ============================================================================
 
-elif selected == "📊 批量预测":
+elif selected == "批量预测":
 
-    st.markdown("### 📁 批量预测患者数据")
-    st.info("上传包含患者信息的CSV文件，系统将自动进行批量预测")
+    st.markdown("### 批量预测患者数据")
+    st.info("上传包含患者信息的CSV文件,系统将自动进行批量预测")
 
     uploaded_file = st.file_uploader(
         "选择CSV文件",
         type=['csv'],
-        help="CSV文件应包含：中性粒细胞植入时间, 出院时淋巴细胞绝对值, 住院时长, 诊断, 供体来源, 出院季节, 是否使用MSC, HLA相合度"
+        help="CSV文件应包含: 中性粒细胞植入时间, 出院时淋巴细胞绝对值, 住院时长, 诊断, 供体来源, 出院季节, 是否使用MSC, HLA相合度"
     )
 
     if uploaded_file is not None:
         try:
             batch_data = pd.read_csv(uploaded_file)
 
-            st.markdown("#### 📊 上传数据预览")
+            st.markdown("#### 上传数据预览")
             st.dataframe(batch_data.head(10), use_container_width=True)
 
-            st.markdown(f"**数据统计：** 共 {len(batch_data)} 条记录")
+            st.markdown(f"**数据统计:** 共 {len(batch_data)} 条记录")
 
-            if st.button("🚀 执行批量预测", use_container_width=True):
+            if st.button("执行批量预测", use_container_width=True):
                 try:
                     # 准备数据
                     prediction_batch = prepare_batch_input_for_prediction(batch_data, expected_features)
                     
                     # 验证特征
                     if len(prediction_batch.columns) != len(expected_features):
-                        st.error(f"❌ 特征数量不匹配！")
+                        st.error(f"特征数量不匹配!")
                         st.stop()
                     
-                    st.success(f"✅ 数据准备完成，特征数量: {len(prediction_batch.columns)}")
+                    st.success(f"数据准备完成,特征数量: {len(prediction_batch.columns)}")
                     
                     # 批量预测
                     batch_predictions = model.predict(prediction_batch)
@@ -662,7 +662,7 @@ elif selected == "📊 批量预测":
                     results_df['高风险概率'] = (batch_probas[:, 1] * 100).round(2)
 
                     # 显示结果
-                    st.markdown("#### 🎯 预测结果")
+                    st.markdown("#### 预测结果")
                     st.dataframe(results_df, use_container_width=True, hide_index=True)
 
                     # 统计信息
@@ -680,7 +680,7 @@ elif selected == "📊 批量预测":
                         st.metric("低风险患者数", low_risk_count, f"{low_risk_count / len(results_df) * 100:.1f}%")
 
                     # 风险分布图
-                    st.markdown("#### 📈 风险分布统计")
+                    st.markdown("#### 风险分布统计")
 
                     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -705,99 +705,99 @@ elif selected == "📊 批量预测":
                     # 下载结果
                     csv = results_df.to_csv(index=False)
                     st.download_button(
-                        label="📥 下载预测结果 (CSV)",
+                        label="下载预测结果 (CSV)",
                         data=csv,
                         file_name="batch_prediction_results.csv",
                         mime="text/csv"
                     )
 
                 except Exception as e:
-                    st.error(f"❌ 预测错误: {str(e)}")
+                    st.error(f"预测错误: {str(e)}")
                     import traceback
                     st.error(traceback.format_exc())
 
         except Exception as e:
-            st.error(f"❌ 数据加载错误: {str(e)}")
+            st.error(f"数据加载错误: {str(e)}")
 
 # ============================================================================
-# 页面3：模型说明
+# 页面3: 模型说明
 # ============================================================================
 
-elif selected == "📈 模型说明":
+elif selected == "模型说明":
 
-    st.markdown("### 📚 模型详细说明")
+    st.markdown("### 模型详细说明")
 
     col_info1, col_info2 = st.columns(2)
 
     with col_info1:
         st.markdown("""
-        #### 🔬 模型基本信息
+#### 模型基本信息
 
-        **算法类型：** XGBoost (Extreme Gradient Boosting)
+**算法类型:** XGBoost (Extreme Gradient Boosting)
 
-        **目标预测：** 造血干细胞移植患儿出院后30天内再入院风险
+**目标预测:** 造血干细胞移植患儿出院后30天内再入院风险
 
-        **输出形式：** 
-        - 风险分类：低风险 / 高风险
-        - 风险概率：0-100%
+**输出形式:**
+- 风险分类: 低风险 / 高风险
+- 风险概率: 0-100%
 
-        **模型性能：**
-        - 测试集 AUC：0.85+
-        - 灵敏度：80%+
-        - 特异性：75%+
+**模型性能:**
+- 测试集 AUC: 0.85+
+- 灵敏度: 80%+
+- 特异性: 75%+
         """)
 
     with col_info2:
         st.markdown("""
-        #### 📊 输入变量说明
+#### 输入变量说明
 
-        **连续变量 (3个)：**
-        - 中性粒细胞植入时间
-        - 出院时淋巴细胞绝对值
-        - 住院时长
+**连续变量 (3个):**
+- 中性粒细胞植入时间
+- 出院时淋巴细胞绝对值
+- 住院时长
 
-        **分类变量 (5个)：**
-        - 诊断疾病类型
-        - 供体来源
-        - 出院季节
-        - 是否使用MSC
-        - HLA相合度
+**分类变量 (5个):**
+- 诊断疾病类型
+- 供体来源
+- 出院季节
+- 是否使用MSC
+- HLA相合度
         """)
 
     st.markdown("---")
 
     st.markdown("""
-    #### 🎯 临床应用指南
+#### 临床应用指南
 
-    **模型目的：**
-    - 识别高风险再入院患者
-    - 为临床决策提供数据支持
-    - 指导出院后管理策略
+**模型目的:**
+- 识别高风险再入院患者
+- 为临床决策提供数据支持
+- 指导出院后管理策略
 
-    **使用注意事项：**
+**使用注意事项:**
 
-    ⚠️ **重要提示**
-    1. 本模型是辅助诊断工具，不能替代临床医学判断
-    2. 预测结果应结合患儿的具体临床情况综合分析
-    3. 医生应基于专业知识和临床经验做出最终决策
-    4. 对于高风险患者，应加强监测和随访
-    5. 如预测不符合临床直觉，应进一步评估
+**重要提示**
+1. 本模型是辅助诊断工具,不能替代临床医学判断
+2. 预测结果应结合患儿的具体临床情况综合分析
+3. 医生应基于专业知识和临床经验做出最终决策
+4. 对于高风险患者,应加强监测和随访
+5. 如预测不符合临床直觉,应进一步评估
 
-    ✅ **最佳实践**
-    - 使用模型预测作为风险分层的参考
-    - 结合临床经验调整管理策略
-    - 定期评估模型预测准确性
-    - 收集反馈意见持续改进模型
+**最佳实践**
+- 使用模型预测作为风险分层的参考
+- 结合临床经验调整管理策略
+- 定期评估模型预测准确性
+- 收集反馈意见持续改进模型
     """)
 
     st.markdown("---")
 
     st.markdown(f"""
-    #### 📋 模型特征详情
+#### 模型特征详情
 
-    **模型期望特征数量:** {len(expected_features)}
-    
-    **特征列表：**
+**模型期望特征数量:** {len(expected_features)}
+
+**特征列表:**
     """)
     
     feature_df = pd.DataFrame({
@@ -807,12 +807,12 @@ elif selected == "📈 模型说明":
     st.dataframe(feature_df, use_container_width=True, hide_index=True)
 
 # ============================================================================
-# 页面4：特征分析
+# 页面4: 特征分析
 # ============================================================================
 
-elif selected == "🔍 特征分析":
+elif selected == "特征分析":
 
-    st.markdown("### 📊 特征分析与可视化")
+    st.markdown("### 特征分析与可视化")
 
     # 加载测试数据用于分析
     @st.cache_data
@@ -825,17 +825,17 @@ elif selected == "🔍 特征分析":
     X_test_raw = load_test_data()
 
     if X_test_raw is not None:
-        st.info(f"✅ 已加载测试数据集，共 {len(X_test_raw)} 条记录")
+        st.info(f"已加载测试数据集,共 {len(X_test_raw)} 条记录")
 
-        st.markdown("#### 📈 特征统计")
+        st.markdown("#### 特征统计")
 
         # 显示原始特征统计
-        st.write("**原始数据统计：**")
+        st.write("**原始数据统计:**")
         st.dataframe(X_test_raw.describe(), use_container_width=True)
 
         # 特征相关性分析
         st.markdown("---")
-        st.markdown("#### 🔗 连续特征相关性分析")
+        st.markdown("#### 连续特征相关性分析")
 
         continuous_cols = [col for col in X_test_raw.columns if col in continuous_features]
         
@@ -850,11 +850,11 @@ elif selected == "🔍 特征分析":
             st.pyplot(fig, use_container_width=True)
             plt.close()
         else:
-            st.warning("连续变量不足，无法进行相关性分析")
+            st.warning("连续变量不足,无法进行相关性分析")
 
         # 显示特征分布
         st.markdown("---")
-        st.markdown("#### 📊 特征分布")
+        st.markdown("#### 特征分布")
 
         for col in continuous_cols:
             fig, ax = plt.subplots(figsize=(10, 4))
@@ -867,70 +867,139 @@ elif selected == "🔍 特征分析":
             plt.close()
 
     else:
-        st.warning("⚠️ 未找到 X_test.csv 文件，无法进行特征分析")
+        st.warning("未找到 X_test.csv 文件,无法进行特征分析")
 
 # ============================================================================
-# 页面5：关于系统
+# 页面5: 关于系统
 # ============================================================================
 
-elif selected == "ℹ️ 关于系统":
+elif selected == "关于系统":
 
-   # ✅ 修复版本（删除emoji，改用英文标点）
-elif selected == "ℹ️ 关于系统":
-    st.markdown(
-        "### 关于本系统\n\n"
-        "#### 系统概述\n"
-        "造血干细胞移植患儿再入院风险预测系统 是基于机器学习技术开发的临床决策支持工具。\n\n"
-        "该系统通过分析患儿的临床特征,利用经过充分验证的XGBoost算法模型,为医疗团队提供科学、量化的再入院风险评估。\n\n"
-        "#### 核心目标\n"
-        "1. 风险识别 - 精准识别高风险再入院患儿\n"
-        "2. 临床支持 - 为医疗决策提供数据依据\n"
-        "3. 管理优化 - 指导个体化出院后管理策略\n"
-        "4. 预防干预 - 支持提前干预和监测\n"
-    )
+    st.markdown("### 关于本系统")
 
+    col_info1, col_info2 = st.columns(2)
 
-    #### 📊 关键特性
+    with col_info1:
+        st.markdown("""
+#### 模型基本信息
 
-    ✨ **核心功能**
-    - 单个患者实时预测
-    - 批量数据导入预测
-    - 模型解释性分析 (SHAP)
-    - 特征统计与可视化
-    - 个性化临床建议
+**算法类型:** XGBoost (Extreme Gradient Boosting)
 
-    #### 💻 技术栈
+**目标预测:** 造血干细胞移植患儿出院后30天内再入院风险
 
-    - **前端框架**：Streamlit
-    - **机器学习**：XGBoost
-    - **数据处理**：Pandas, NumPy
-    - **可视化**：Matplotlib, Seaborn
-    - **模型解释**：SHAP
+**输出形式:**
+- 风险分类: 低风险 / 高风险
+- 风险概率: 0-100%
 
-    #### ⚖️ 法律声明
+**模型性能:**
+- 测试集 AUC: 0.85+
+- 灵敏度: 80%+
+- 特异性: 75%+
+        """)
 
-    ⚠️ **免责声明**
+    with col_info2:
+        st.markdown("""
+#### 输入变量说明
 
-    - 本系统仅供医疗专业人士参考使用
-    - 预测结果不构成医学诊断或治疗建议
-    - 医生应基于个人专业知识和临床经验做出最终决策
-    - 对于高风险患者，应加强监测和随访
-    - 如预测不符合临床直觉，应进一步评估
-    - 使用本系统导致的任何后果，用户自行承担责任
+**连续变量 (3个):**
+- 中性粒细胞植入时间
+- 出院时淋巴细胞绝对值
+- 住院时长
 
+**分类变量 (5个):**
+- 诊断疾病类型
+- 供体来源
+- 出院季节
+- 是否使用MSC
+- HLA相合度
+        """)
 
-    #### 📅 版本信息
+    st.markdown("---")
 
-    - **系统版本**：v1.1.0 (简化版 - 无需 feature_names.pkl)
-    - **最后更新**：2026年2月
-    - **主要改进**：
-      - ✅ 直接从模型获取特征名称
-      - ✅ 移除对 feature_names.pkl 的依赖
-      - ✅ 更简洁可靠的特征加载机制
-      - ✅ 完整的错误处理和调试支持
+    st.markdown("""
+#### 系统核心功能
 
-    ---
+**主要功能:**
+- 单个患者实时预测
+- 批量数据导入预测
+- 模型解释性分析 (SHAP)
+- 特征统计与可视化
+- 个性化临床建议
 
+**技术栈:**
+- 前端框架: Streamlit
+- 机器学习: XGBoost
+- 数据处理: Pandas, NumPy
+- 可视化: Matplotlib, Seaborn
+- 模型解释: SHAP
+    """)
+
+    st.markdown("---")
+
+    st.markdown("""
+#### 临床应用指南
+
+**模型目的:**
+- 识别高风险再入院患者
+- 为临床决策提供数据支持
+- 指导出院后管理策略
+
+**使用注意事项:**
+
+**重要提示**
+1. 本模型是辅助诊断工具,不能替代临床医学判断
+2. 预测结果应结合患儿的具体临床情况综合分析
+3. 医生应基于专业知识和临床经验做出最终决策
+4. 对于高风险患者,应加强监测和随访
+5. 如预测不符合临床直觉,应进一步评估
+
+**最佳实践**
+- 使用模型预测作为风险分层的参考
+- 结合临床经验调整管理策略
+- 定期评估模型预测准确性
+- 收集反馈意见持续改进模型
+    """)
+
+    st.markdown("---")
+
+    st.markdown("""
+#### 法律声明
+
+**免责声明:**
+
+- 本系统仅供医疗专业人士参考使用
+- 预测结果不构成医学诊断或治疗建议
+- 医生应基于个人专业知识和临床经验做出最终决策
+- 对于高风险患者,应加强监测和随访
+- 如预测不符合临床直觉,应进一步评估
+- 使用本系统导致的任何后果,用户自行承担责任
+    """)
+
+    st.markdown("---")
+
+    st.markdown(f"""
+#### 版本信息
+
+- **系统版本:** v1.1.0 (简化版 - 无需 feature_names.pkl)
+- **最后更新:** 2026年2月
+- **主要改进:**
+  - 直接从模型获取特征名称
+  - 移除对 feature_names.pkl 的依赖
+  - 更简洁可靠的特征加载机制
+  - 完整的错误处理和调试支持
+
+#### 模型特征详情
+
+**模型期望特征数量:** {len(expected_features)}
+
+**特征列表:**
+    """)
+    
+    feature_df = pd.DataFrame({
+        '序号': range(1, len(expected_features) + 1),
+        '特征名': expected_features
+    })
+    st.dataframe(feature_df, use_container_width=True, hide_index=True)
 
 # ============================================================================
 # 页脚
@@ -944,5 +1013,3 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
-
-
