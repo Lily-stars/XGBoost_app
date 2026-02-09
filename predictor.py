@@ -1,11 +1,8 @@
 # ============================================================================
-# streamlit_app.py
-# 造血干细胞移植患儿非计划再入院预测模型 - Web部署 (v1.2.0)
-# 修复：特征对齐问题，支持 drop_first=True 的 One-Hot 编码
+# predictor.py (修复版 v1.4.0 - 无需 feature_names.pkl)
 # ============================================================================
 
 import joblib
-import pickle
 import numpy as np
 import pandas as pd
 import shap
@@ -14,10 +11,8 @@ import warnings
 import streamlit as st
 from streamlit_option_menu import option_menu
 
-# 过滤警告
 warnings.filterwarnings('ignore')
 
-# 设置Streamlit页面配置
 st.set_page_config(
     page_title="造血干细胞移植患儿再入院预测模型",
     page_icon="🏥",
@@ -25,7 +20,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 自定义CSS样式
 st.markdown("""
 <style>
     .main {
@@ -56,45 +50,46 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # ============================================================================
-# 1. 模型和数据加载
+# 1. 模型加载（直接从模型获取特征名）
 # ============================================================================
 
 @st.cache_resource
-def load_model_and_features():
-    """加载训练好的XGBoost模型和特征信息"""
+def load_model():
+    """加载模型并直接获取特征名称"""
     try:
-        # 加载模型
         model = joblib.load('best_xgboost_model.pkl')
-        st.success("✅ 模型加载成功！")
         
-        # 加载期望的特征列表（One-Hot编码后的特征名）
-        # 这应该是训练时One-Hot编码后的所有特征名列表
-        with open('feature_names.pkl', 'rb') as f:
-            expected_features = pickle.load(f)
+        # 直接从模型获取特征名称 - 无需 feature_names.pkl
+        feature_names = model.get_booster().feature_names
         
-        st.success(f"✅ 特征名称加载成功！期望特征数: {len(expected_features)}")
+        if feature_names is None:
+            st.error("❌ 模型中未找到特征名称！")
+            st.error("请确保您的模型是用有效的特征名保存的")
+            st.stop()
         
-        return model, expected_features
+        return model, feature_names
     
-    except FileNotFoundError as e:
-        st.error(f"❌ 错误：找不到模型文件或特征文件 - {e}")
-        st.error("请确保 'best_xgboost_model.pkl' 和 'feature_names.pkl' 文件存在于应用目录")
+    except FileNotFoundError:
+        st.error("❌ 错误：找不到 'best_xgboost_model.pkl' 文件")
+        st.error("请确保模型文件在应用目录中")
         st.stop()
     except Exception as e:
-        st.error(f"❌ 错误：加载模型或特征名称时出错 - {e}")
+        st.error(f"❌ 模型加载失败: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         st.stop()
 
 
-# 加载模型和特征
-model, expected_features = load_model_and_features()
+model, expected_features = load_model()
+
+# 调试信息
+st.session_state.debug_mode = False
 
 # ============================================================================
 # 2. 特征编码信息定义
 # ============================================================================
 
-# 这些信息必须与训练时使用的编码完全一致
 continuous_features = [
     '中性粒细胞植入时间',
     '出院时淋巴细胞绝对值',
@@ -109,7 +104,6 @@ categorical_features = [
     'HLA相合度'
 ]
 
-# 原始输入值到编码值的映射
 diagnosis_options = {
     "良性/非恶性血液疾病": 1,
     "白血病": 2,
@@ -161,15 +155,13 @@ def prepare_input_for_prediction(
     """
     将用户输入转换为模型可以接受的格式
     
-    参数：
-    - 各个临床指标的值
-    - expected_features_list: 模型期望的特征列表（One-Hot编码后）
-    
-    返回：
-    - 对齐后的DataFrame，列与expected_features_list完全一致
+    步骤：
+    1. 创建原始数据DataFrame
+    2. 进行One-Hot编码
+    3. 严格对齐到模型期望的特征列表
     """
     
-    # 步骤1：创建原始数据DataFrame
+    # 步骤1：创建原始数据
     raw_data = pd.DataFrame({
         '中性粒细胞植入时间': [neutrophil_time],
         '出院时淋巴细胞绝对值': [lymphocyte_value],
@@ -181,27 +173,26 @@ def prepare_input_for_prediction(
         'HLA相合度': [hla_code]
     })
     
-    # 步骤2：对分类变量进行One-Hot编码（使用drop_first=True，与训练时一致）
-    # 注意：pd.get_dummies 默认 drop_first=False
-    # 为了与您的训练数据一致，这里设置 drop_first=True
+    # 步骤2：One-Hot编码
     encoded_data = pd.get_dummies(
         raw_data,
         columns=categorical_features,
-        drop_first=True,  # ⬅️ 关键：与训练时保持一致
+        drop_first=False,
         dtype=int
     )
     
     # 步骤3：特征对齐
-    # 创建一个包含所有期望特征的DataFrame，初始值为0
-    aligned_data = pd.DataFrame(0, 
-                                index=[0], 
-                                columns=expected_features_list)
+    # 创建一个与模型期望完全一致的DataFrame
+    aligned_data = pd.DataFrame(
+        0, 
+        index=[0], 
+        columns=expected_features_list
+    )
     
-    # 将编码后的数据中存在的特征填充到对齐的DataFrame中
+    # 填充已有的特征
     for feature in expected_features_list:
         if feature in encoded_data.columns:
             aligned_data[feature] = encoded_data[feature].values[0]
-        # 如果特征不在编码后的数据中，保持为0（这是drop_first=True的结果）
     
     return aligned_data
 
@@ -211,35 +202,29 @@ def prepare_batch_input_for_prediction(
     expected_features_list
 ):
     """
-    将批量输入数据转换为模型可以接受的格式
-    
-    参数：
-    - raw_data_df: 包含原始特征的DataFrame
-    - expected_features_list: 模型期望的特征列表
-    
-    返回：
-    - 对齐后的DataFrame
+    批量数据预处理
     """
     
-    # 步骤1：对分类变量进行One-Hot编码（使用drop_first=True）
+    # One-Hot编码
     encoded_data = pd.get_dummies(
         raw_data_df,
         columns=categorical_features,
-        drop_first=True,
+        drop_first=False,
         dtype=int
     )
     
-    # 步骤2：特征对齐
-    aligned_data = pd.DataFrame(0, 
-                                index=range(len(encoded_data)), 
-                                columns=expected_features_list)
+    # 特征对齐
+    aligned_data = pd.DataFrame(
+        0, 
+        index=range(len(encoded_data)), 
+        columns=expected_features_list
+    )
     
     for feature in expected_features_list:
         if feature in encoded_data.columns:
             aligned_data[feature] = encoded_data[feature].values
     
     return aligned_data
-
 
 # ============================================================================
 # 4. 页面标题和导航
@@ -250,7 +235,7 @@ st.markdown("<h1 style='text-align: center; color: #1f77b4;'>🏥 造血干细�
 st.markdown("<p style='text-align: center; color: #666;'>基于XGBoost机器学习模型的临床决策支持工具</p>",
             unsafe_allow_html=True)
 
-# 侧边栏导航菜单
+# 侧边栏导航
 with st.sidebar:
     st.markdown("### 📋 导航菜单")
     selected = option_menu(
@@ -260,6 +245,10 @@ with st.sidebar:
         menu_icon="cast",
         default_index=0
     )
+    
+    # 调试模式开关
+    st.markdown("---")
+    st.session_state.debug_mode = st.checkbox("🐛 调试模式")
 
 # ============================================================================
 # 页面1：预测中心（单个患者预测）
@@ -357,12 +346,28 @@ if selected == "🏠 预测中心":
                 expected_features
             )
             
-            # 验证特征数量
+            # 调试信息
+            if st.session_state.debug_mode:
+                st.info("🐛 调试信息")
+                st.write(f"输入特征数: {len(prediction_input.columns)}")
+                st.write(f"模型期望特征数: {len(expected_features)}")
+                st.write(f"特征列表: {list(prediction_input.columns)}")
+            
+            # 验证特征
             if len(prediction_input.columns) != len(expected_features):
-                st.error(f"❌ 特征数量不匹配！预期: {len(expected_features)}, 实际: {len(prediction_input.columns)}")
+                st.error(f"❌ 特征数量不匹配！期望: {len(expected_features)}, 实际: {len(prediction_input.columns)}")
                 st.stop()
             
-            st.info(f"✅ 数据准备完成，特征数量: {len(prediction_input.columns)}")
+            if set(prediction_input.columns) != set(expected_features):
+                missing = set(expected_features) - set(prediction_input.columns)
+                extra = set(prediction_input.columns) - set(expected_features)
+                if missing:
+                    st.error(f"❌ 缺失特征: {missing}")
+                if extra:
+                    st.error(f"❌ 多余特征: {extra}")
+                st.stop()
+            
+            st.success(f"✅ 数据准备完成，特征数量: {len(prediction_input.columns)}")
             
             # 进行预测
             predicted_class = model.predict(prediction_input)[0]
@@ -626,12 +631,12 @@ elif selected == "📊 批量预测":
                     # 准备数据
                     prediction_batch = prepare_batch_input_for_prediction(batch_data, expected_features)
                     
-                    # 验证特征数量
+                    # 验证特征
                     if len(prediction_batch.columns) != len(expected_features):
                         st.error(f"❌ 特征数量不匹配！")
                         st.stop()
                     
-                    st.info(f"✅ 数据准备完成，特征数量: {len(prediction_batch.columns)}")
+                    st.success(f"✅ 数据准备完成，特征数量: {len(prediction_batch.columns)}")
                     
                     # 批量预测
                     batch_predictions = model.predict(prediction_batch)
@@ -910,13 +915,13 @@ elif selected == "ℹ️ 关于系统":
 
     #### 📅 版本信息
 
-    - **系统版本**：v1.2.0 (核心修复版)
+    - **系统版本**：v1.4.0 (简化版 - 无需 feature_names.pkl)
     - **最后更新**：2026年2月
     - **主要改进**：
-      - ✅ 完整修复特征对齐问题
-      - ✅ 支持 drop_first=True One-Hot编码
-      - ✅ 增强错误处理和用户反馈
-      - ✅ 优化数据预处理流程
+      - ✅ 直接从模型获取特征名称
+      - ✅ 移除对 feature_names.pkl 的依赖
+      - ✅ 更简洁可靠的特征加载机制
+      - ✅ 完整的错误处理和调试支持
 
     ---
 
@@ -931,8 +936,8 @@ elif selected == "ℹ️ 关于系统":
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 12px;'>
-    <p>🏥 造血干细胞移植患儿再入院风险预测系统 | 版本 v1.1.0</p>
+    <p>🏥 造血干细胞移植患儿再入院风险预测系统 | 版本 v1.4.0</p>
     <p>⚠️ 免责声明：本系统仅供医疗专业人士参考，不能替代医学诊断</p>
+    <p>© 2026 医疗AI系统团队 | 保留所有权利</p>
 </div>
 """, unsafe_allow_html=True)
-
