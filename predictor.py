@@ -4,6 +4,7 @@
 # ============================================================================
 
 import joblib
+import pickle
 import numpy as np
 import pandas as pd
 import shap
@@ -62,13 +63,25 @@ st.markdown("""
 
 @st.cache_resource
 def load_model():
-    """加载训练好的XGBoost模型"""
+    """加载训练好的XGBoost模型和特征信息"""
     try:
+        # 加载模型
         model = joblib.load('best_xgboost_model.pkl')
         st.success("✅ 模型加载成功！")
-        return model
-    except FileNotFoundError:
-        st.error("❌ 错误：找不到 'best_xgboost_model.pkl' 文件")
+        
+        # 加载特征名称
+        try:
+            with open('feature_names.pkl', 'rb') as f:
+                feature_names = pickle.load(f)
+            st.success("✅ 特征名称加载成功！")
+        except FileNotFoundError:
+            st.warning("⚠️ 未找到 feature_names.pkl，将使用默认特征")
+            feature_names = None
+        
+        return model, feature_names
+    
+    except FileNotFoundError as e:
+        st.error(f"❌ 错误：找不到模型文件 - {e}")
         st.stop()
 
 
@@ -84,7 +97,7 @@ def load_test_data():
 
 
 # 加载资源
-model = load_model()
+model, feature_names = load_model()
 X_test = load_test_data()
 
 # ============================================================================
@@ -274,7 +287,7 @@ if selected == "🏠 预测中心":
         # 对齐特征列（确保与模型训练特征一致）
         if X_test is not None:
             # 获取模型的所有特征
-            expected_features = X_test.columns
+            expected_features = X_test.columns.tolist()
 
             # 为缺失的特征添加0值
             for feature in expected_features:
@@ -283,10 +296,21 @@ if selected == "🏠 预测中心":
 
             # 选择并排序特征
             input_encoded = input_encoded[expected_features]
+            
+            # ✅ 添加：设置模型的特征名称
+            try:
+                model.get_booster().feature_names = expected_features
+            except Exception as e:
+                st.warning(f"⚠️ 设置特征名称时出错: {e}")
 
         # 模型预测
-        predicted_class = model.predict(input_encoded)[0]  # 0: 低风险, 1: 高风险
-        predicted_proba = model.predict_proba(input_encoded)[0]  # 概率值
+        try:
+            predicted_class = model.predict(input_encoded)[0]  # 0: 低风险, 1: 高风险
+            predicted_proba = model.predict_proba(input_encoded)[0]  # 概率值
+        except ValueError as e:
+            st.error(f"❌ 预测出错: {e}")
+            st.error("请确保所有输入特征都正确填写")
+            st.stop()
 
         # ============================================================================
         # 6. 预测结果展示
@@ -471,7 +495,7 @@ if selected == "🏠 预测中心":
                 
                 # 使用matplotlib绘制特征重要性
                 feature_importance = np.abs(shap_values_for_plot).mean(axis=0)
-                feature_names = input_encoded.columns.tolist()
+                feature_names_list = input_encoded.columns.tolist()
                 
                 # 获取top 10特征
                 top_indices = np.argsort(feature_importance)[-10:][::-1]
@@ -479,7 +503,7 @@ if selected == "🏠 预测中心":
                 fig, ax = plt.subplots(figsize=(10, 6))
                 ax.barh(range(len(top_indices)), feature_importance[top_indices], color='#1f77b4')
                 ax.set_yticks(range(len(top_indices)))
-                ax.set_yticklabels([feature_names[i] for i in top_indices])
+                ax.set_yticklabels([feature_names_list[i] for i in top_indices])
                 ax.set_xlabel('平均SHAP值的绝对值', fontsize=11, fontweight='bold')
                 ax.set_title('Top 10 特征重要性 (SHAP)', fontsize=12, fontweight='bold', pad=10)
                 ax.invert_yaxis()
@@ -565,15 +589,25 @@ elif selected == "📊 批量预测":
 
                 # 对齐特征
                 if X_test is not None:
-                    expected_features = X_test.columns
+                    expected_features = X_test.columns.tolist()
                     for feature in expected_features:
                         if feature not in batch_encoded.columns:
                             batch_encoded[feature] = 0
                     batch_encoded = batch_encoded[expected_features]
+                    
+                    # 设置模型的特征名称
+                    try:
+                        model.get_booster().feature_names = expected_features
+                    except Exception as e:
+                        st.warning(f"⚠️ 设置特征名称时出错: {e}")
 
                 # 批量预测
-                batch_predictions = model.predict(batch_encoded)
-                batch_probas = model.predict_proba(batch_encoded)
+                try:
+                    batch_predictions = model.predict(batch_encoded)
+                    batch_probas = model.predict_proba(batch_encoded)
+                except Exception as e:
+                    st.error(f"❌ 预测出错: {e}")
+                    st.stop()
 
                 # 构建结果表
                 results_df = batch_data.copy()
@@ -756,16 +790,22 @@ elif selected == "🔍 特征分析":
         st.markdown("#### 🔗 特征相关性分析")
 
         if len(continuous_vars) > 1:
-            corr_matrix = X_test[continuous_vars].corr()
+            # 过滤出X_test中存在的连续变量
+            existing_continuous_vars = [v for v in continuous_vars if v in X_test.columns]
+            
+            if len(existing_continuous_vars) > 1:
+                corr_matrix = X_test[existing_continuous_vars].corr()
 
-            fig, ax = plt.subplots(figsize=(8, 6))
-            import seaborn as sns
+                fig, ax = plt.subplots(figsize=(8, 6))
+                import seaborn as sns
 
-            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0,
-                        fmt='.2f', square=True, ax=ax, cbar_kws={'label': '相关系数'})
-            ax.set_title('连续变量相关性矩阵', fontsize=12, fontweight='bold', pad=10)
-            st.pyplot(fig, use_container_width=True)
-            plt.close()
+                sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0,
+                            fmt='.2f', square=True, ax=ax, cbar_kws={'label': '相关系数'})
+                ax.set_title('连续变量相关性矩阵', fontsize=12, fontweight='bold', pad=10)
+                st.pyplot(fig, use_container_width=True)
+                plt.close()
+            else:
+                st.warning("⚠️ 连续变量不足，无法进行相关性分析")
 
     else:
         st.warning("⚠️ 未加载测试数据，特征分析功能暂不可用")
@@ -819,12 +859,6 @@ elif selected == "ℹ️ 关于系统":
     - 使用本系统导致的任何后果，用户自行承担责任
     - 系统开发者和运营方不承担任何法律责任
 
-    #### 📞 联系方式
-
-    如有问题或建议，请联系：
-    - **技术支持**：support@healthcare-ai.com
-    - **临床咨询**：clinical@healthcare-ai.com
-    - **系统反馈**：feedback@healthcare-ai.com
 
     #### 📅 版本信息
 
