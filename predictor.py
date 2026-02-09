@@ -7,13 +7,16 @@ import numpy as np
 import pandas as pd
 import shap
 import matplotlib.pyplot as plt
+import matplotlib
+import matplotlib.font_manager as fm
 import warnings
 import streamlit as st
 from streamlit_option_menu import option_menu
+import seaborn as sns  # ⭐ 添加这一行（移到顶部）
 
-# ⭐ 中文字体配置（必须在导入 matplotlib 之后立即执行）
-matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']  # 优先使用黑体
-matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+# 中文字体配置
+matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
+matplotlib.rcParams['axes.unicode_minus'] = False
 matplotlib.rcParams['font.size'] = 11
 
 warnings.filterwarnings('ignore')
@@ -940,4 +943,5 @@ st.markdown("""
  
 </div>
 """, unsafe_allow_html=True)
+
 
