@@ -11,7 +11,14 @@ import warnings
 import streamlit as st
 from streamlit_option_menu import option_menu
 
+# ⭐ 中文字体配置（必须在导入 matplotlib 之后立即执行）
+matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']  # 优先使用黑体
+matplotlib.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+matplotlib.rcParams['font.size'] = 11
+
 warnings.filterwarnings('ignore')
+
+
 
 st.set_page_config(
     page_title="造血干细胞移植患儿再入院预测模型",
@@ -907,15 +914,10 @@ elif selected == "ℹ️ 关于系统":
     - 如预测不符合临床直觉，应进一步评估
     - 使用本系统导致的任何后果，用户自行承担责任
 
-    #### 📞 联系方式
-
-    如有问题或建议，请联系：
-    - **技术支持**：support@healthcare-ai.com
-    - **临床咨询**：clinical@healthcare-ai.com
 
     #### 📅 版本信息
 
-    - **系统版本**：v1.4.0 (简化版 - 无需 feature_names.pkl)
+    - **系统版本**：v1.1.0 (简化版 - 无需 feature_names.pkl)
     - **最后更新**：2026年2月
     - **主要改进**：
       - ✅ 直接从模型获取特征名称
@@ -925,9 +927,6 @@ elif selected == "ℹ️ 关于系统":
 
     ---
 
-    **版权所有** © 2026 医疗AI系统团队  
-    保留所有权利。
-    """)
 
 # ============================================================================
 # 页脚
@@ -936,8 +935,9 @@ elif selected == "ℹ️ 关于系统":
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 12px;'>
-    <p>🏥 造血干细胞移植患儿再入院风险预测系统 | 版本 v1.4.0</p>
+    <p>🏥 造血干细胞移植患儿再入院风险预测系统 | 版本 v1.1.0</p>
     <p>⚠️ 免责声明：本系统仅供医疗专业人士参考，不能替代医学诊断</p>
-    <p>© 2026 医疗AI系统团队 | 保留所有权利</p>
+ 
 </div>
 """, unsafe_allow_html=True)
+
