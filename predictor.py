@@ -18,106 +18,51 @@ import os
 import tempfile
 from pathlib import Path
 
-# ============================================================================
-# 字体配置 - 终极解决方案 (v1.5.0)
-# ============================================================================
-
 def setup_matplotlib_fonts_enhanced():
     """
     增强的中文字体配置方案
-    - 自动下载并安装中文字体
-    - 多层备选字体方案
-    - 兼容不同操作系统
     """
+    # 关键配置：防止负号显示为方框
+    matplotlib.rcParams['axes.unicode_minus'] = False
     
-    # 获取系统信息
-    import platform
-    system = platform.system()
-    
-    # 方案1: 动态字体安装（优先级最高）
-    font_path = None
-    font_name = None
-    
-    # 尝试从常见位置获取字体
-    potential_fonts = {
-        'SimHei': [
-            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-            '/System/Library/Fonts/PingFang.ttc',
-            'C:\\Windows\\Fonts\\simhei.ttf',
-        ],
-        'Source Han Sans': [
-            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-        ]
-    }
-    
-    for font_name, paths in potential_fonts.items():
-        for path in paths:
-            if os.path.exists(path):
-                font_path = path
-                break
-        if font_path:
-            break
-    
-    # 如果找到字体，注册到matplotlib
-    if font_path:
-        try:
-            fm.fontManager.addfont(font_path)
-            matplotlib.rcParams['font.sans-serif'] = [os.path.splitext(os.path.basename(font_path))[0]]
-        except Exception as e:
-            print(f"字体加载警告: {e}")
-    
-    # 方案2: 使用系统可用字体
-    available_fonts = fm.get_font_names()
+    # 尝试加载多种常见中文字体名
     font_candidates = [
-        'SimHei', 'SimSun', 'Microsoft YaHei', 'WenQuanYi Micro Hei',
-        'STHeiti', 'STKaiti', 'Heiti TC', 'Hiragino Sans GB',
-        'PingFang SC', 'Source Han Sans CN', 'Noto Sans CJK SC'
+        'SimHei', 'Microsoft YaHei', 'Source Han Sans CN', 'Noto Sans CJK SC',
+        'WenQuanYi Micro Hei', 'STHeiti', 'PingFang SC', 'SimSun'
     ]
     
-    selected_fonts = [f for f in font_candidates if f in available_fonts]
+    # 自动搜索系统内可用的字体
+    available_fonts = [f.name for f in fm.fontManager.ttflist]
+    valid_fonts = [f for f in font_candidates if f in available_fonts]
     
-    # 方案3: 备选字体列表（降级方案）
-    if selected_fonts:
-        matplotlib.rcParams['font.sans-serif'] = selected_fonts + ['DejaVu Sans']
+    if valid_fonts:
+        matplotlib.rcParams['font.sans-serif'] = valid_fonts + ['sans-serif']
     else:
-        matplotlib.rcParams['font.sans-serif'] = [
-            'DejaVu Sans', 'Arial', 'sans-serif'
-        ]
-    
-    # 关键配置：防止各种显示问题
-    matplotlib.rcParams['axes.unicode_minus'] = False
-    matplotlib.rcParams['axes.linewidth'] = 1.2
-    
-    # 字体大小配置（增强可读性）
-    matplotlib.rcParams['font.size'] = 12
-    matplotlib.rcParams['font.weight'] = 'normal'
-    
-    # 图表渲染质量
-    matplotlib.rcParams['figure.dpi'] = 100
-    matplotlib.rcParams['savefig.dpi'] = 150
-    matplotlib.rcParams['figure.facecolor'] = 'white'
-    matplotlib.rcParams['axes.facecolor'] = 'white'
-    
-    # 文本显示配置
-    matplotlib.rcParams['axes.labelsize'] = 11
-    matplotlib.rcParams['xtick.labelsize'] = 10
-    matplotlib.rcParams['ytick.labelsize'] = 10
-    matplotlib.rcParams['legend.fontsize'] = 10
-    matplotlib.rcParams['figure.titlesize'] = 13
-    
-    # 重要: 禁用符号处理（防止字体自动替换）
-    matplotlib.rcParams['pdf.fonttype'] = 42
-    matplotlib.rcParams['ps.fonttype'] = 42
-    
-    # 绘图风格
-    sns.set_style("whitegrid")
-    matplotlib.rcParams['grid.alpha'] = 0.3
+        # 如果系统没安装，尝试寻找中文字体路径 (Linux 常用路径)
+        linux_font_path = '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
+        if os.path.exists(linux_font_path):
+            fm.fontManager.addfont(linux_font_path)
+            font_prop = fm.FontProperties(fname=linux_font_path)
+            matplotlib.rcParams['font.sans-serif'] = [font_prop.get_name()]
+        else:
+            # 最后的降级方案：不报错，尽量显示
+            matplotlib.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial']
 
-# 在模块加载时执行字体配置
+    # 字体大小与质量配置
+    matplotlib.rcParams.update({
+        'font.size': 10,
+        'axes.labelsize': 11,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'figure.dpi': 100,
+        'savefig.dpi': 150
+    })
+    
+    sns.set_style("whitegrid", {"font.sans-serif": matplotlib.rcParams['font.sans-serif']})
+
+# 执行字体配置
 setup_matplotlib_fonts_enhanced()
-
 warnings.filterwarnings('ignore')
-
 # ============================================================================
 # Streamlit 页面配置
 # ============================================================================
@@ -1070,4 +1015,5 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
