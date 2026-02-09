@@ -1,713 +1,1072 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import matplotlib
-matplotlib.use('Agg')  # 非交互式后端
-import matplotlib.pyplot as plt
-import seaborn as sns
-import plotly.express as px
-import plotly.graph_objects as go
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    confusion_matrix, roc_curve, auc, classification_report
-)
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-from imblearn.over_sampling import SMOTE
-import shap
-import pickle
-import os
-from streamlit_option_menu import option_menu
+# -*- coding: utf-8 -*-
+# ============================================================================
+# predictor.py (修复版 v1.5.0 - 完整中文字体显示)
+# ============================================================================
 
-# 页面配置
+import joblib
+import numpy as np
+import pandas as pd
+import shap
+import matplotlib.pyplot as plt
+import matplotlib
+import matplotlib.font_manager as fm
+import warnings
+import streamlit as st
+from streamlit_option_menu import option_menu
+import seaborn as sns
+import os
+import tempfile
+from pathlib import Path
+
+# ============================================================================
+# 字体配置 - 终极解决方案 (v1.5.0)
+# ============================================================================
+
+def setup_matplotlib_fonts_enhanced():
+    """
+    增强的中文字体配置方案
+    - 自动下载并安装中文字体
+    - 多层备选字体方案
+    - 兼容不同操作系统
+    """
+    
+    # 获取系统信息
+    import platform
+    system = platform.system()
+    
+    # 方案1: 动态字体安装（优先级最高）
+    font_path = None
+    font_name = None
+    
+    # 尝试从常见位置获取字体
+    potential_fonts = {
+        'SimHei': [
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+            '/System/Library/Fonts/PingFang.ttc',
+            'C:\\Windows\\Fonts\\simhei.ttf',
+        ],
+        'Source Han Sans': [
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        ]
+    }
+    
+    for font_name, paths in potential_fonts.items():
+        for path in paths:
+            if os.path.exists(path):
+                font_path = path
+                break
+        if font_path:
+            break
+    
+    # 如果找到字体，注册到matplotlib
+    if font_path:
+        try:
+            fm.fontManager.addfont(font_path)
+            matplotlib.rcParams['font.sans-serif'] = [os.path.splitext(os.path.basename(font_path))[0]]
+        except Exception as e:
+            print(f"字体加载警告: {e}")
+    
+    # 方案2: 使用系统可用字体
+    available_fonts = fm.get_font_names()
+    font_candidates = [
+        'SimHei', 'SimSun', 'Microsoft YaHei', 'WenQuanYi Micro Hei',
+        'STHeiti', 'STKaiti', 'Heiti TC', 'Hiragino Sans GB',
+        'PingFang SC', 'Source Han Sans CN', 'Noto Sans CJK SC'
+    ]
+    
+    selected_fonts = [f for f in font_candidates if f in available_fonts]
+    
+    # 方案3: 备选字体列表（降级方案）
+    if selected_fonts:
+        matplotlib.rcParams['font.sans-serif'] = selected_fonts + ['DejaVu Sans']
+    else:
+        matplotlib.rcParams['font.sans-serif'] = [
+            'DejaVu Sans', 'Arial', 'sans-serif'
+        ]
+    
+    # 关键配置：防止各种显示问题
+    matplotlib.rcParams['axes.unicode_minus'] = False
+    matplotlib.rcParams['axes.linewidth'] = 1.2
+    
+    # 字体大小配置（增强可读性）
+    matplotlib.rcParams['font.size'] = 12
+    matplotlib.rcParams['font.weight'] = 'normal'
+    
+    # 图表渲染质量
+    matplotlib.rcParams['figure.dpi'] = 100
+    matplotlib.rcParams['savefig.dpi'] = 150
+    matplotlib.rcParams['figure.facecolor'] = 'white'
+    matplotlib.rcParams['axes.facecolor'] = 'white'
+    
+    # 文本显示配置
+    matplotlib.rcParams['axes.labelsize'] = 11
+    matplotlib.rcParams['xtick.labelsize'] = 10
+    matplotlib.rcParams['ytick.labelsize'] = 10
+    matplotlib.rcParams['legend.fontsize'] = 10
+    matplotlib.rcParams['figure.titlesize'] = 13
+    
+    # 重要: 禁用符号处理（防止字体自动替换）
+    matplotlib.rcParams['pdf.fonttype'] = 42
+    matplotlib.rcParams['ps.fonttype'] = 42
+    
+    # 绘图风格
+    sns.set_style("whitegrid")
+    matplotlib.rcParams['grid.alpha'] = 0.3
+
+# 在模块加载时执行字体配置
+setup_matplotlib_fonts_enhanced()
+
+warnings.filterwarnings('ignore')
+
+# ============================================================================
+# Streamlit 页面配置
+# ============================================================================
+
 st.set_page_config(
-    page_title="机器学习预测系统",
-    page_icon="🤖",
+    page_title="造血干细胞移植患儿再入院预测模型",
+    page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 自定义CSS
 st.markdown("""
-    <style>
+<style>
+    * {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    }
+    
     .main {
-        padding: 0rem 1rem;
+        padding-top: 2rem;
     }
-    .stButton>button {
-        width: 100%;
-        background-color: #4CAF50;
-        color: white;
+    
+    .stTitle {
+        color: #1f77b4;
+        text-align: center;
+        font-weight: bold;
     }
-    .metric-card {
-        background-color: #f0f2f6;
+    
+    .prediction-box-high {
+        background-color: #ffcccc;
         padding: 20px;
         border-radius: 10px;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        border-left: 5px solid #ff0000;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
     }
-    </style>
+    
+    .prediction-box-low {
+        background-color: #ccffcc;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #00cc00;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    }
+    
+    .metric-box {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 8px;
+        border-top: 3px solid #1f77b4;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        font-weight: bold;
+    }
+    
+    p, span, div {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# 侧边栏菜单
-with st.sidebar:
-    selected = option_menu(
-        menu_title="主菜单",
-        options=["数据上传", "数据探索", "模型训练", "模型预测", "模型解释"],
-        icons=["cloud-upload", "bar-chart", "cpu", "magic", "lightbulb"],
-        menu_icon="cast",
-        default_index=0,
+# ============================================================================
+# 添加函数：改进的图表保存方式
+# ============================================================================
+
+def save_figure_with_chinese(fig, dpi=150):
+    """
+    保存包含中文的图表，避免字体问题
+    返回bytes对象供streamlit使用
+    """
+    import io
+    
+    # 确保使用正确的后端
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', 
+                facecolor='white', edgecolor='none', pad_inches=0.3)
+    buf.seek(0)
+    return buf
+
+def display_figure_safe(fig, use_container_width=True, caption=None):
+    """
+    安全显示包含中文的图表
+    """
+    try:
+        # 调整图表布局
+        plt.tight_layout()
+        
+        # 保存为bytes
+        buf = save_figure_with_chinese(fig)
+        st.image(buf, use_container_width=use_container_width, caption=caption)
+        
+    except Exception as e:
+        st.warning(f"图表显示出现问题: {str(e)}")
+    finally:
+        plt.close(fig)
+
+# ============================================================================
+# 1. 模型加载
+# ============================================================================
+
+@st.cache_resource
+def load_model():
+    """加载模型"""
+    try:
+        model = joblib.load('best_xgboost_model.pkl')
+        feature_names = model.get_booster().feature_names
+        
+        if feature_names is None:
+            st.error("错误: 模型中未找到特征名称!")
+            st.stop()
+        
+        return model, feature_names
+    
+    except FileNotFoundError:
+        st.error("错误: 找不到 'best_xgboost_model.pkl' 文件")
+        st.stop()
+    except Exception as e:
+        st.error(f"模型加载失败: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        st.stop()
+
+model, expected_features = load_model()
+st.session_state.debug_mode = False
+
+# ============================================================================
+# 2. 特征编码信息定义
+# ============================================================================
+
+continuous_features = [
+    '中性粒细胞植入时间',
+    '出院时淋巴细胞绝对值',
+    '住院时长'
+]
+
+categorical_features = [
+    '诊断',
+    '供体来源',
+    '出院季节',
+    '是否使用MSC',
+    'HLA相合度'
+]
+
+diagnosis_options = {
+    "良性/非恶性血液疾病": 1,
+    "白血病": 2,
+    "骨髓瘤/淋巴瘤": 3,
+    "原发性免疫缺陷病": 4,
+    "遗传代谢疾病": 5,
+    "实体肿瘤": 6
+}
+
+donor_options = {
+    "自身": 1,
+    "父母": 2,
+    "同胞": 3,
+    "无血缘他人": 4
+}
+
+season_options = {
+    "春季": 1,
+    "夏季": 2,
+    "秋季": 3,
+    "冬季": 4
+}
+
+hla_options = {
+    "10/10、9/10相合": 1,
+    "8/10、7/10、6/10、5/10相合": 2
+}
+
+msc_options = {
+    "否": 0,
+    "是": 1
+}
+
+# ============================================================================
+# 3. 数据预处理函数
+# ============================================================================
+
+def prepare_input_for_prediction(
+    neutrophil_time,
+    lymphocyte_value,
+    hospitalization_days,
+    diagnosis_code,
+    donor_code,
+    season_code,
+    msc_code,
+    hla_code,
+    expected_features_list
+):
+    """将用户输入转换为模型可以接受的格式"""
+    
+    raw_data = pd.DataFrame({
+        '中性粒细胞植入时间': [neutrophil_time],
+        '出院时淋巴细胞绝对值': [lymphocyte_value],
+        '住院时长': [hospitalization_days],
+        '诊断': [diagnosis_code],
+        '供体来源': [donor_code],
+        '出院季节': [season_code],
+        '是否使用MSC': [msc_code],
+        'HLA相合度': [hla_code]
+    })
+    
+    encoded_data = pd.get_dummies(
+        raw_data,
+        columns=categorical_features,
+        drop_first=False,
+        dtype=int
     )
+    
+    aligned_data = pd.DataFrame(
+        0, 
+        index=[0], 
+        columns=expected_features_list
+    )
+    
+    for feature in expected_features_list:
+        if feature in encoded_data.columns:
+            aligned_data[feature] = encoded_data[feature].values[0]
+    
+    return aligned_data
 
-# 初始化 session state
-if 'data' not in st.session_state:
-    st.session_state.data = None
-if 'model' not in st.session_state:
-    st.session_state.model = None
-if 'X_train' not in st.session_state:
-    st.session_state.X_train = None
-if 'X_test' not in st.session_state:
-    st.session_state.X_test = None
-if 'y_train' not in st.session_state:
-    st.session_state.y_train = None
-if 'y_test' not in st.session_state:
-    st.session_state.y_test = None
-if 'feature_names' not in st.session_state:
-    st.session_state.feature_names = None
+def prepare_batch_input_for_prediction(raw_data_df, expected_features_list):
+    """批量数据预处理"""
+    
+    encoded_data = pd.get_dummies(
+        raw_data_df,
+        columns=categorical_features,
+        drop_first=False,
+        dtype=int
+    )
+    
+    aligned_data = pd.DataFrame(
+        0, 
+        index=range(len(encoded_data)), 
+        columns=expected_features_list
+    )
+    
+    for feature in expected_features_list:
+        if feature in encoded_data.columns:
+            aligned_data[feature] = encoded_data[feature].values
+    
+    return aligned_data
 
-# ==================== 数据上传 ====================
-if selected == "数据上传":
-    st.title("📊 数据上传")
+# ============================================================================
+# 页面标题
+# ============================================================================
+
+st.markdown("""
+<h1 style='text-align: center; color: #1f77b4; font-weight: bold;'>
+造血干细胞移植患儿再入院风险预测系统
+</h1>
+<p style='text-align: center; color: #666;'>
+基于XGBoost机器学习模型的临床决策支持工具
+</p>
+""", unsafe_allow_html=True)
+
+# ============================================================================
+# 侧边栏导航
+# ============================================================================
+
+with st.sidebar:
+    st.markdown("### 导航菜单")
+    selected = option_menu(
+        menu_title=None,
+        options=["预测中心", "批量预测", "模型说明", "特征分析", "关于系统"],
+        icons=["house", "file-earmark", "bar-chart", "search", "info-circle"],
+        menu_icon="cast",
+        default_index=0
+    )
+    
     st.markdown("---")
-    
-    upload_method = st.radio("选择数据来源", ["上传CSV文件", "使用示例数据"])
-    
-    if upload_method == "上传CSV文件":
-        uploaded_file = st.file_uploader("选择CSV文件", type=['csv'])
-        
-        if uploaded_file is not None:
-            try:
-                df = pd.read_csv(uploaded_file)
-                st.session_state.data = df
-                st.success(f"✅ 数据上传成功！共 {df.shape[0]} 行，{df.shape[1]} 列")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.subheader("数据预览")
-                    st.dataframe(df.head(10), use_container_width=True)
-                
-                with col2:
-                    st.subheader("数据信息")
-                    st.write(f"**行数:** {df.shape[0]}")
-                    st.write(f"**列数:** {df.shape[1]}")
-                    st.write(f"**缺失值:** {df.isnull().sum().sum()}")
-                    
-                    st.subheader("数据类型")
-                    st.dataframe(pd.DataFrame({
-                        '列名': df.columns,
-                        '数据类型': df.dtypes.values,
-                        '缺失值': df.isnull().sum().values
-                    }), use_container_width=True)
-                    
-            except Exception as e:
-                st.error(f"❌ 数据加载失败: {str(e)}")
-    
-    else:  # 使用示例数据
-        from sklearn.datasets import make_classification
-        
-        if st.button("生成示例数据"):
-            X, y = make_classification(
-                n_samples=1000,
-                n_features=10,
-                n_informative=8,
-                n_redundant=2,
-                random_state=42
+    st.session_state.debug_mode = st.checkbox("调试模式")
+
+# ============================================================================
+# 页面1: 预测中心
+# ============================================================================
+
+if selected == "预测中心":
+
+    st.markdown("---")
+    st.markdown("### 患者信息输入")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 基本临床指标")
+
+        neutrophil_time = st.number_input(
+            "中性粒细胞植入时间 (天)",
+            min_value=0, max_value=100, value=15, step=1,
+            help="从移植日期到中性粒细胞恢复的天数"
+        )
+
+        lymphocyte_value = st.number_input(
+            "出院时淋巴细胞绝对值 (x10^9/L)",
+            min_value=0.0, max_value=10.0, value=1.0, step=0.1,
+            help="出院时淋巴细胞的绝对计数值"
+        )
+
+        hospitalization_days = st.number_input(
+            "住院时长 (天)",
+            min_value=0, max_value=365, value=30, step=1,
+            help="从入院到出院的总天数"
+        )
+
+    with col2:
+        st.markdown("#### 病情分类信息")
+
+        diagnosis = st.selectbox(
+            "诊断疾病类型",
+            list(diagnosis_options.keys()),
+            help="患者的基础疾病诊断"
+        )
+        diagnosis_code = diagnosis_options[diagnosis]
+
+        hla_match = st.selectbox(
+            "HLA相合度",
+            list(hla_options.keys()),
+            help="造血干细胞移植的HLA配型相合程度"
+        )
+        hla_code = hla_options[hla_match]
+
+        donor_source = st.selectbox(
+            "供体来源",
+            list(donor_options.keys()),
+            help="造血干细胞的供体类型"
+        )
+        donor_code = donor_options[donor_source]
+
+        discharge_season = st.selectbox(
+            "出院季节",
+            list(season_options.keys()),
+            help="患者出院的季节"
+        )
+        season_code = season_options[discharge_season]
+
+        use_msc = st.selectbox(
+            "是否使用MSC (间充质干细胞)",
+            list(msc_options.keys()),
+            help="是否在治疗中使用了间充质干细胞"
+        )
+        msc_code = msc_options[use_msc]
+
+    # ============================================================================
+    # 预测按钮和结果处理
+    # ============================================================================
+
+    st.markdown("---")
+
+    col_predict, col_space = st.columns([1, 2])
+
+    with col_predict:
+        predict_button = st.button("进行预测", key="predict_btn", use_container_width=True)
+
+    if predict_button:
+        try:
+            # 准备数据
+            prediction_input = prepare_input_for_prediction(
+                neutrophil_time,
+                lymphocyte_value,
+                hospitalization_days,
+                diagnosis_code,
+                donor_code,
+                season_code,
+                msc_code,
+                hla_code,
+                expected_features
             )
             
-            feature_names = [f'Feature_{i+1}' for i in range(X.shape[1])]
-            df = pd.DataFrame(X, columns=feature_names)
-            df['Target'] = y
+            if st.session_state.debug_mode:
+                st.info("调试信息")
+                st.write(f"输入特征数: {len(prediction_input.columns)}")
+                st.write(f"模型期望特征数: {len(expected_features)}")
             
-            st.session_state.data = df
-            st.success("✅ 示例数据生成成功！")
-            st.dataframe(df.head(10), use_container_width=True)
+            # 验证特征
+            if len(prediction_input.columns) != len(expected_features):
+                st.error(f"特征数量不匹配! 期望: {len(expected_features)}, 实际: {len(prediction_input.columns)}")
+                st.stop()
+            
+            if set(prediction_input.columns) != set(expected_features):
+                missing = set(expected_features) - set(prediction_input.columns)
+                extra = set(prediction_input.columns) - set(expected_features)
+                if missing:
+                    st.error(f"缺失特征: {missing}")
+                if extra:
+                    st.error(f"多余特征: {extra}")
+                st.stop()
+            
+            st.success(f"数据准备完成，特征数量: {len(prediction_input.columns)}")
+            
+            # 进行预测
+            predicted_class = model.predict(prediction_input)[0]
+            predicted_proba = model.predict_proba(prediction_input)[0]
+            
+            # ============================================================================
+            # 预测结果展示
+            # ============================================================================
 
-# ==================== 数据探索 ====================
-elif selected == "数据探索":
-    st.title("📈 数据探索")
-    st.markdown("---")
-    
-    if st.session_state.data is None:
-        st.warning("⚠️ 请先上传数据！")
-    else:
-        df = st.session_state.data
-        
-        tab1, tab2, tab3 = st.tabs(["统计摘要", "数据可视化", "相关性分析"])
-        
-        with tab1:
-            st.subheader("描述性统计")
-            st.dataframe(df.describe(), use_container_width=True)
-            
-            # 数据质量报告
-            st.subheader("数据质量报告")
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("总样本数", df.shape[0])
-            with col2:
-                st.metric("特征数量", df.shape[1])
-            with col3:
-                st.metric("缺失值", df.isnull().sum().sum())
-            with col4:
-                st.metric("重复行", df.duplicated().sum())
-        
-        with tab2:
-            st.subheader("特征分布")
-            
-            # 选择数值型列
-            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-            
-            if len(numeric_cols) > 0:
-                selected_col = st.selectbox("选择特征", numeric_cols)
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # 直方图 - Plotly
-                    fig = px.histogram(
-                        df, 
-                        x=selected_col, 
-                        nbins=30,
-                        title=f'{selected_col} 分布',
-                        color_discrete_sequence=['#636EFA']
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                with col2:
-                    # 箱线图 - Plotly
-                    fig = px.box(
-                        df, 
-                        y=selected_col,
-                        title=f'{selected_col} 箱线图',
-                        color_discrete_sequence=['#EF553B']
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                # 如果有目标变量，显示分组分布
-                if 'Target' in df.columns:
-                    st.subheader("按目标变量分组")
-                    fig = px.violin(
-                        df, 
-                        y=selected_col, 
-                        x='Target',
-                        box=True,
-                        title=f'{selected_col} 按目标变量分组',
-                        color='Target'
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-        
-        with tab3:
-            st.subheader("特征相关性矩阵")
-            
-            numeric_df = df.select_dtypes(include=[np.number])
-            
-            if numeric_df.shape[1] > 1:
-                # 计算相关系数
-                corr = numeric_df.corr()
-                
-                # 使用 Plotly 绘制热力图
-                fig = px.imshow(
-                    corr,
-                    text_auto='.2f',
-                    aspect='auto',
-                    color_continuous_scale='RdBu_r',
-                    title='特征相关性热力图'
-                )
-                fig.update_layout(height=600)
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # 显示高相关性特征对
-                st.subheader("高相关性特征对 (|r| > 0.7)")
-                high_corr = []
-                for i in range(len(corr.columns)):
-                    for j in range(i+1, len(corr.columns)):
-                        if abs(corr.iloc[i, j]) > 0.7:
-                            high_corr.append({
-                                '特征1': corr.columns[i],
-                                '特征2': corr.columns[j],
-                                '相关系数': round(corr.iloc[i, j], 3)
-                            })
-                
-                if high_corr:
-                    st.dataframe(pd.DataFrame(high_corr), use_container_width=True)
-                else:
-                    st.info("没有发现高相关性特征对")
+            st.markdown("---")
+            st.markdown("### 预测结果")
 
-# ==================== 模型训练 ====================
-elif selected == "模型训练":
-    st.title("🤖 模型训练")
-    st.markdown("---")
-    
-    if st.session_state.data is None:
-        st.warning("⚠️ 请先上传数据！")
-    else:
-        df = st.session_state.data
-        
-        # 配置区域
-        st.subheader("1️⃣ 配置训练参数")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # 选择目标变量
-            target_col = st.selectbox("选择目标变量", df.columns.tolist())
-            
-            # 选择特征
-            feature_cols = st.multiselect(
-                "选择特征列",
-                [col for col in df.columns if col != target_col],
-                default=[col for col in df.columns if col != target_col]
-            )
-        
-        with col2:
-            # 模型选择
-            model_type = st.selectbox(
-                "选择模型",
-                ["Random Forest", "XGBoost"]
-            )
-            
-            # 测试集比例
-            test_size = st.slider("测试集比例", 0.1, 0.4, 0.2, 0.05)
-            
-            # 是否使用SMOTE
-            use_smote = st.checkbox("使用 SMOTE 处理不平衡数据", value=False)
-        
-        if st.button("🚀 开始训练", type="primary"):
-            if len(feature_cols) == 0:
-                st.error("❌ 请至少选择一个特征！")
+            # 风险等级显示
+            if predicted_class == 1:
+                st.markdown("""
+                <div class='prediction-box-high'>
+                    <h2 style='color: #cc0000; margin: 0;'>⚠️ 警告: 高风险</h2>
+                    <p style='font-size: 18px; margin: 10px 0 0 0;'>
+                        患儿在出院后30天内<b>再入院风险较高</b>
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                risk_color = "#ff6b6b"
             else:
-                with st.spinner("模型训练中..."):
-                    try:
-                        # 准备数据
-                        X = df[feature_cols]
-                        y = df[target_col]
-                        
-                        # 分割数据
-                        X_train, X_test, y_train, y_test = train_test_split(
-                            X, y, test_size=test_size, random_state=42, stratify=y
-                        )
-                        
-                        # 保存到 session state
-                        st.session_state.X_train = X_train
-                        st.session_state.X_test = X_test
-                        st.session_state.y_train = y_train
-                        st.session_state.y_test = y_test
-                        st.session_state.feature_names = feature_cols
-                        
-                        # SMOTE 处理
-                        if use_smote:
-                            smote = SMOTE(random_state=42)
-                            X_train, y_train = smote.fit_resample(X_train, y_train)
-                            st.info(f"✅ SMOTE 处理完成: {X_train.shape[0]} 样本")
-                        
-                        # 训练模型
-                        if model_type == "Random Forest":
-                            model = RandomForestClassifier(
-                                n_estimators=100,
-                                max_depth=10,
-                                random_state=42,
-                                n_jobs=-1
-                            )
-                        else:
-                            model = XGBClassifier(
-                                n_estimators=100,
-                                max_depth=6,
-                                learning_rate=0.1,
-                                random_state=42,
-                                n_jobs=-1,
-                                eval_metric='logloss'
-                            )
-                        
-                        model.fit(X_train, y_train)
-                        st.session_state.model = model
-                        
-                        # 预测
-                        y_pred = model.predict(X_test)
-                        y_pred_proba = model.predict_proba(X_test)
-                        
-                        st.success("✅ 模型训练完成！")
-                        
-                        # 显示结果
-                        st.subheader("2️⃣ 模型性能")
-                        
-                        # 指标
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            acc = accuracy_score(y_test, y_pred)
-                            st.metric("准确率", f"{acc:.3f}")
-                        
-                        with col2:
-                            prec = precision_score(y_test, y_pred, average='weighted', zero_division=0)
-                            st.metric("精确率", f"{prec:.3f}")
-                        
-                        with col3:
-                            rec = recall_score(y_test, y_pred, average='weighted', zero_division=0)
-                            st.metric("召回率", f"{rec:.3f}")
-                        
-                        with col4:
-                            f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
-                            st.metric("F1分数", f"{f1:.3f}")
-                        
-                        # 混淆矩阵和ROC曲线
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.subheader("混淆矩阵")
-                            cm = confusion_matrix(y_test, y_pred)
-                            
-                            # 使用 Plotly
-                            fig = px.imshow(
-                                cm,
-                                text_auto=True,
-                                labels=dict(x="预测值", y="真实值"),
-                                x=[f'Class {i}' for i in range(cm.shape[1])],
-                                y=[f'Class {i}' for i in range(cm.shape[0])],
-                                color_continuous_scale='Blues'
-                            )
-                            fig.update_layout(height=400)
-                            st.plotly_chart(fig, use_container_width=True)
-                        
-                        with col2:
-                            st.subheader("ROC 曲线")
-                            
-                            # 二分类情况
-                            if len(np.unique(y)) == 2:
-                                fpr, tpr, _ = roc_curve(y_test, y_pred_proba[:, 1])
-                                roc_auc = auc(fpr, tpr)
-                                
-                                fig = go.Figure()
-                                fig.add_trace(go.Scatter(
-                                    x=fpr, y=tpr,
-                                    mode='lines',
-                                    name=f'ROC (AUC = {roc_auc:.3f})',
-                                    line=dict(color='darkorange', width=2)
-                                ))
-                                fig.add_trace(go.Scatter(
-                                    x=[0, 1], y=[0, 1],
-                                    mode='lines',
-                                    name='Random',
-                                    line=dict(color='navy', width=2, dash='dash')
-                                ))
-                                fig.update_layout(
-                                    xaxis_title='假正率 (FPR)',
-                                    yaxis_title='真正率 (TPR)',
-                                    height=400,
-                                    showlegend=True
-                                )
-                                st.plotly_chart(fig, use_container_width=True)
-                            else:
-                                st.info("多分类问题，跳过 ROC 曲线绘制")
-                        
-                        # 特征重要性
-                        st.subheader("3️⃣ 特征重要性")
-                        
-                        if hasattr(model, 'feature_importances_'):
-                            importance_df = pd.DataFrame({
-                                '特征': feature_cols,
-                                '重要性': model.feature_importances_
-                            }).sort_values('重要性', ascending=False)
-                            
-                            fig = px.bar(
-                                importance_df,
-                                x='重要性',
-                                y='特征',
-                                orientation='h',
-                                title='特征重要性排名',
-                                color='重要性',
-                                color_continuous_scale='Viridis'
-                            )
-                            fig.update_layout(height=max(400, len(feature_cols) * 30))
-                            st.plotly_chart(fig, use_container_width=True)
-                        
-                        # 分类报告
-                        st.subheader("4️⃣ 详细分类报告")
-                        report = classification_report(y_test, y_pred, output_dict=True)
-                        report_df = pd.DataFrame(report).transpose()
-                        st.dataframe(report_df.style.highlight_max(axis=0), use_container_width=True)
-                        
-                        # 保存模型
-                        st.subheader("5️⃣ 保存模型")
-                        if st.button("💾 保存模型"):
-                            with open('trained_model.pkl', 'wb') as f:
-                                pickle.dump(model, f)
-                            st.success("✅ 模型已保存为 trained_model.pkl")
-                        
-                    except Exception as e:
-                        st.error(f"❌ 训练失败: {str(e)}")
-                        import traceback
-                        st.code(traceback.format_exc())
+                st.markdown("""
+                <div class='prediction-box-low'>
+                    <h2 style='color: #00aa00; margin: 0;'>✓ 确认: 低风险</h2>
+                    <p style='font-size: 18px; margin: 10px 0 0 0;'>
+                        患儿在出院后30天内<b>再入院风险较低</b>
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                risk_color = "#51cf66"
 
-# ==================== 模型预测 ====================
-elif selected == "模型预测":
-    st.title("🔮 模型预测")
-    st.markdown("---")
-    
-    if st.session_state.model is None:
-        st.warning("⚠️ 请先训练模型！")
-        
-        # 上传已有模型
-        st.subheader("或上传已训练的模型")
-        uploaded_model = st.file_uploader("上传 .pkl 模型文件", type=['pkl'])
-        
-        if uploaded_model is not None:
-            try:
-                model = pickle.load(uploaded_model)
-                st.session_state.model = model
-                st.success("✅ 模型加载成功！")
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ 模型加载失败: {str(e)}")
-    
-    else:
-        model = st.session_state.model
-        feature_names = st.session_state.feature_names
-        
-        st.subheader("输入特征值进行预测")
-        
-        # 创建输入表单
-        input_data = {}
-        
-        # 动态生成输入框
-        cols = st.columns(3)
-        for idx, feature in enumerate(feature_names):
-            with cols[idx % 3]:
-                input_data[feature] = st.number_input(
-                    f"{feature}",
-                    value=0.0,
-                    format="%.4f"
-                )
-        
-        if st.button("🎯 开始预测", type="primary"):
-            try:
-                # 准备输入数据
-                input_df = pd.DataFrame([input_data])
-                
-                # 预测
-                prediction = model.predict(input_df)[0]
-                prediction_proba = model.predict_proba(input_df)[0]
-                
-                # 显示结果
-                st.success("✅ 预测完成！")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.metric("预测类别", f"Class {prediction}")
-                
-                with col2:
-                    st.metric("预测概率", f"{prediction_proba[prediction]:.2%}")
-                
-                # 概率分布
-                st.subheader("各类别概率分布")
-                proba_df = pd.DataFrame({
-                    '类别': [f'Class {i}' for i in range(len(prediction_proba))],
-                    '概率': prediction_proba
-                })
-                
-                fig = px.bar(
-                    proba_df,
-                    x='类别',
-                    y='概率',
-                    title='预测概率分布',
-                    color='概率',
-                    color_continuous_scale='Bluered'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # 输入数据回顾
-                st.subheader("输入数据")
-                st.dataframe(input_df, use_container_width=True)
-                
-            except Exception as e:
-                st.error(f"❌ 预测失败: {str(e)}")
-        
-        # 批量预测
-        st.markdown("---")
-        st.subheader("批量预测")
-        
-        batch_file = st.file_uploader("上传CSV文件进行批量预测", type=['csv'])
-        
-        if batch_file is not None:
-            try:
-                batch_df = pd.read_csv(batch_file)
-                
-                # 检查特征
-                missing_features = set(feature_names) - set(batch_df.columns)
-                if missing_features:
-                    st.error(f"❌ 缺少特征: {missing_features}")
-                else:
-                    X_batch = batch_df[feature_names]
-                    predictions = model.predict(X_batch)
-                    predictions_proba = model.predict_proba(X_batch)
-                    
-                    # 添加预测结果
-                    result_df = batch_df.copy()
-                    result_df['预测类别'] = predictions
-                    result_df['预测概率'] = predictions_proba.max(axis=1)
-                    
-                    st.success(f"✅ 批量预测完成！共 {len(result_df)} 条记录")
-                    st.dataframe(result_df, use_container_width=True)
-                    
-                    # 下载结果
-                    csv = result_df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 下载预测结果",
-                        data=csv,
-                        file_name='predictions.csv',
-                        mime='text/csv'
-                    )
-                    
-            except Exception as e:
-                st.error(f"❌ 批量预测失败: {str(e)}")
+            # 概率值详细展示
+            st.markdown("#### 风险概率分布")
 
-# ==================== 模型解释 ====================
-elif selected == "模型解释":
-    st.title("💡 模型解释 (SHAP)")
-    st.markdown("---")
-    
-    if st.session_state.model is None or st.session_state.X_test is None:
-        st.warning("⚠️ 请先训练模型！")
-    else:
-        model = st.session_state.model
-        X_test = st.session_state.X_test
-        X_train = st.session_state.X_train
-        
-        st.info("🔍 SHAP (SHapley Additive exPlanations) 用于解释模型的预测结果")
-        
-        with st.spinner("计算 SHAP 值中..."):
+            col_prob1, col_prob2 = st.columns(2)
+
+            with col_prob1:
+                st.metric(
+                    "低风险概率",
+                    f"{predicted_proba[0]:.2%}",
+                )
+
+            with col_prob2:
+                st.metric(
+                    "高风险概率",
+                    f"{predicted_proba[1]:.2%}",
+                )
+
+            # 概率进度条
+            st.write("**风险概率可视化:**")
+            fig_prob, ax_prob = plt.subplots(figsize=(12, 2))
+
+            risk_prob = predicted_proba[1]
+            ax_prob.barh(['再入院风险'], [risk_prob], color=risk_color, height=0.5)
+            ax_prob.barh(['再入院风险'], [1 - risk_prob], left=[risk_prob],
+                         color='#e0e0e0', height=0.5)
+            ax_prob.set_xlim([0, 1])
+            ax_prob.set_xlabel('概率', fontsize=12, fontweight='bold')
+            ax_prob.set_title('风险概率分布', fontsize=13, fontweight='bold', pad=10)
+
+            # 添加百分比标签
+            ax_prob.text(risk_prob / 2, 0, f'{risk_prob:.1%}',
+                         ha='center', va='center', fontsize=12, fontweight='bold', color='white')
+            ax_prob.text(risk_prob + (1 - risk_prob) / 2, 0, f'{1 - risk_prob:.1%}',
+                         ha='center', va='center', fontsize=12, fontweight='bold', color='gray')
+
+            ax_prob.spines['top'].set_visible(False)
+            ax_prob.spines['right'].set_visible(False)
+            ax_prob.spines['left'].set_visible(False)
+            ax_prob.set_yticks([])
+
+            display_figure_safe(fig_prob)
+
+            # ============================================================================
+            # 个性化临床建议
+            # ============================================================================
+
+            st.markdown("---")
+            st.markdown("### 个性化临床建议")
+
+            probability = predicted_proba[predicted_class] * 100
+
+            if predicted_class == 1:
+                st.error(f"""
+### ⚠️ 警告: 高风险患者 (风险概率: {probability:.1f}%)
+
+**建议措施:**
+
+**1. 加强出院后随访**
+   - 出院后 1周内 进行首次随访
+   - 建议采用电话随访 + 门诊复诊相结合的方式
+   - 密切关注体温、感染征象及移植物抗宿主病(GVHD)表现
+
+**2. 严格的药物管理**
+   - 严格遵医嘱服用免疫抑制剂，切勿擅自停药或改量
+   - 规范预防性抗菌/抗病毒/抗真菌药物应用
+   - 建立服药日记，避免漏服
+
+**3. 感染防控与隔离**
+   - 严格执行保护性隔离，避免接触呼吸道感染者
+   - 居家环境定期消毒，指导家属做好手卫生
+   - 监测血常规及C反应蛋白等感染指标
+
+**4. 精细化营养支持**
+   - 执行洁净饮食(低菌饮食)，食物必须彻底煮熟
+   - 建议高蛋白、易消化食物，避免生冷、隔夜饭菜
+   - 监测体重变化，警惕短期内体重急剧下降
+
+**5. 紧急应对 (红旗征)**
+   - 明确紧急联系人及夜间急诊流程
+   - 出现以下情况立即就医:
+     • 体温 >38.0℃或出现寒战
+     • 严重腹泻(次数增多/量大)或便血
+     • 持续恶心呕吐影响进食
+     • 皮疹范围扩大或伴有水泡
+     • 气促、呼吸困难或血氧下降
+""")
+
+            else:
+                st.success(f"""
+### ✓ 确认: 低风险患者 (风险概率: {probability:.1f}%)
+
+**建议措施:**
+
+**1. 常规随访计划**
+   - 出院后按医嘱进行首次门诊随访
+   - 后续按照标准方案定期复查
+   - 保持电话联系畅通，定期汇报患儿状况
+
+**2. 药物依从性**
+   - 继续按时服用抗排异药物和预防性药物
+   - 了解药物常见副作用，如有不适及时反馈
+
+**3. 生活与防护**
+   - 保持良好的个人卫生，勤洗手
+   - 免疫功能完全重建前，避免去人群密集场所
+   - 外出时务必规范佩戴口罩
+
+**4. 营养与康复**
+   - 均衡饮食，适量补充维生素，促进身体恢复
+   - 避免食用生食(如生鱼片、半熟蛋)
+   - 循序渐进增加活动量，避免过度疲劳
+
+**5. 持续监测**
+   - 虽然风险较低，仍需警惕迟发性排异反应
+   - 定期监测血药浓度及肝肾功能
+   - 若出现发热或不明原因不适，应及时就诊
+""")
+
+            # ============================================================================
+            # SHAP 特征解释
+            # ============================================================================
+
+            st.markdown("---")
+            st.markdown("### 模型解释性分析 (SHAP)")
+
             try:
-                # 使用小样本以节省内存
-                sample_size = min(100, len(X_test))
-                X_sample = X_test.sample(n=sample_size, random_state=42)
-                
-                # 创建 SHAP explainer
                 explainer = shap.TreeExplainer(model)
-                shap_values = explainer.shap_values(X_sample)
-                
-                st.success("✅ SHAP 值计算完成！")
-                
-                # Tab 布局
-                tab1, tab2, tab3 = st.tabs(["Summary Plot", "Force Plot", "Dependence Plot"])
-                
-                with tab1:
-                    st.subheader("SHAP Summary Plot")
-                    st.write("显示所有特征对模型预测的整体影响")
-                    
-                    # 处理多分类情况
-                    if isinstance(shap_values, list):
-                        class_idx = st.selectbox("选择类别", range(len(shap_values)))
-                        shap_values_plot = shap_values[class_idx]
-                    else:
-                        shap_values_plot = shap_values
-                    
-                    # 绘制 Summary Plot
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    shap.summary_plot(shap_values_plot, X_sample, show=False)
-                    st.pyplot(fig)
-                    plt.close()
-                
-                with tab2:
-                    st.subheader("SHAP Force Plot")
-                    st.write("显示单个样本的预测解释")
-                    
-                    sample_idx = st.slider("选择样本索引", 0, len(X_sample)-1, 0)
-                    
-                    # Force plot
-                    if isinstance(shap_values, list):
-                        expected_value = explainer.expected_value[class_idx]
-                        shap_val = shap_values[class_idx][sample_idx]
-                    else:
-                        expected_value = explainer.expected_value
-                        shap_val = shap_values[sample_idx]
-                    
-                    fig, ax = plt.subplots(figsize=(12, 3))
-                    shap.plots.waterfall(
-                        shap.Explanation(
-                            values=shap_val,
-                            base_values=expected_value,
-                            data=X_sample.iloc[sample_idx].values,
-                            feature_names=X_sample.columns.tolist()
-                        ),
-                        show=False
-                    )
-                    st.pyplot(fig)
-                    plt.close()
-                
-                with tab3:
-                    st.subheader("SHAP Dependence Plot")
-                    st.write("显示某个特征与模型输出之间的关系")
-                    
-                    feature = st.selectbox("选择特征", X_sample.columns.tolist())
-                    
-                    if isinstance(shap_values, list):
-                        shap_values_dep = shap_values[class_idx]
-                    else:
-                        shap_values_dep = shap_values
-                    
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    shap.dependence_plot(
-                        feature,
-                        shap_values_dep,
-                        X_sample,
-                        show=False
-                    )
-                    st.pyplot(fig)
-                    plt.close()
-                
-                # 特征重要性（基于SHAP）
-                st.subheader("基于 SHAP 的特征重要性")
+                shap_values = explainer.shap_values(prediction_input)
                 
                 if isinstance(shap_values, list):
-                    shap_importance = np.abs(shap_values[class_idx]).mean(axis=0)
+                    shap_values_for_plot = shap_values[1]
                 else:
-                    shap_importance = np.abs(shap_values).mean(axis=0)
+                    shap_values_for_plot = shap_values
                 
-                importance_df = pd.DataFrame({
-                    '特征': X_sample.columns,
-                    'SHAP重要性': shap_importance
-                }).sort_values('SHAP重要性', ascending=False)
+                feature_importance = np.abs(shap_values_for_plot).flatten()
+                feature_importance_sorted_idx = np.argsort(feature_importance)[-10:][::-1]
                 
-                fig = px.bar(
-                    importance_df,
-                    x='SHAP重要性',
-                    y='特征',
-                    orientation='h',
-                    title='基于 SHAP 的特征重要性',
-                    color='SHAP重要性',
-                    color_continuous_scale='Reds'
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                fig, ax = plt.subplots(figsize=(11, 7))
+                top_features = [expected_features[i] for i in feature_importance_sorted_idx]
+                top_importance = feature_importance[feature_importance_sorted_idx]
                 
-            except Exception as e:
-                st.error(f"❌ SHAP 计算失败: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
-                
-                st.info("""
-                💡 提示：SHAP 计算可能需要较长时间或消耗较多内存。
-                如果遇到问题，可以尝试：
-                1. 减少样本量
-                2. 使用更简单的模型
-                3. 升级到付费版本获取更多资源
-                """)
+                ax.barh(range(len(top_features)), top_importance, color='#1f77b4')
+                ax.set_yticks(range(len(top_features)))
+                ax.set_yticklabels(top_features, fontsize=11)
+                ax.set_xlabel('平均SHAP值的绝对值', fontsize=12, fontweight='bold')
+                ax.set_title('Top 10 特征重要性 (SHAP)', fontsize=13, fontweight='bold', pad=15)
+                ax.invert_yaxis()
+                ax.grid(axis='x', alpha=0.3)
 
+                display_figure_safe(fig)
+
+                st.info("SHAP分析显示对本次预测影响最大的10个特征")
+
+            except Exception as e:
+                st.warning(f"SHAP分析出现问题: {str(e)}")
+
+            # ============================================================================
+            # 输入特征汇总表
+            # ============================================================================
+
+            st.markdown("---")
+            st.markdown("### 输入特征汇总")
+
+            summary_data = {
+                '特征类型': ['连续变量'] * 3 + ['分类变量'] * 5,
+                '特征名称': [
+                    '中性粒细胞植入时间',
+                    '出院时淋巴细胞绝对值',
+                    '住院时长',
+                    '诊断',
+                    '供体来源',
+                    '出院季节',
+                    '是否使用MSC',
+                    'HLA相合度'
+                ],
+                '输入值': [
+                    f"{neutrophil_time} 天",
+                    f"{lymphocyte_value} x10^9/L",
+                    f"{hospitalization_days} 天",
+                    diagnosis,
+                    donor_source,
+                    discharge_season,
+                    use_msc,
+                    hla_match
+                ]
+            }
+
+            summary_df = pd.DataFrame(summary_data)
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+        except Exception as e:
+            st.error(f"预测错误: {str(e)}")
+            st.error("请确保所有输入特征都正确填写")
+            import traceback
+            st.error(traceback.format_exc())
+
+# ============================================================================
+# 页面2: 批量预测
+# ============================================================================
+
+elif selected == "批量预测":
+
+    st.markdown("### 批量预测患者数据")
+    st.info("上传包含患者信息的CSV文件，系统将自动进行批量预测")
+
+    uploaded_file = st.file_uploader(
+        "选择CSV文件",
+        type=['csv'],
+        help="CSV文件应包含各必要的特征列"
+    )
+
+    if uploaded_file is not None:
+        try:
+            batch_data = pd.read_csv(uploaded_file)
+
+            st.markdown("#### 上传数据预览")
+            st.dataframe(batch_data.head(10), use_container_width=True)
+
+            st.markdown(f"**数据统计:** 共 {len(batch_data)} 条记录")
+
+            if st.button("执行批量预测", use_container_width=True):
+                try:
+                    prediction_batch = prepare_batch_input_for_prediction(batch_data, expected_features)
+                    
+                    if len(prediction_batch.columns) != len(expected_features):
+                        st.error(f"特征数量不匹配!")
+                        st.stop()
+                    
+                    st.success(f"数据准备完成，特征数量: {len(prediction_batch.columns)}")
+                    
+                    batch_predictions = model.predict(prediction_batch)
+                    batch_probas = model.predict_proba(prediction_batch)
+
+                    results_df = batch_data.copy()
+                    results_df['预测结果'] = batch_predictions.astype(int)
+                    results_df['预测标签'] = results_df['预测结果'].map({0: '低风险', 1: '高风险'})
+                    results_df['低风险概率(%)'] = (batch_probas[:, 0] * 100).round(2)
+                    results_df['高风险概率(%)'] = (batch_probas[:, 1] * 100).round(2)
+
+                    st.markdown("#### 预测结果")
+                    st.dataframe(results_df, use_container_width=True, hide_index=True)
+
+                    col_stat1, col_stat2, col_stat3 = st.columns(3)
+
+                    with col_stat1:
+                        st.metric("总患者数", len(results_df))
+
+                    with col_stat2:
+                        high_risk_count = (results_df['预测结果'] == 1).sum()
+                        st.metric("高风险患者数", high_risk_count, f"{high_risk_count / len(results_df) * 100:.1f}%")
+
+                    with col_stat3:
+                        low_risk_count = (results_df['预测结果'] == 0).sum()
+                        st.metric("低风险患者数", low_risk_count, f"{low_risk_count / len(results_df) * 100:.1f}%")
+
+                    st.markdown("#### 风险分布统计")
+
+                    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+                    risk_counts = results_df['预测标签'].value_counts()
+                    colors = ['#51cf66', '#ff6b6b']
+                    axes[0].pie(risk_counts.values, labels=risk_counts.index, autopct='%1.1f%%',
+                                colors=colors, startangle=90, textprops={'fontsize': 11, 'weight': 'bold'})
+                    axes[0].set_title('风险等级分布', fontsize=13, fontweight='bold')
+
+                    axes[1].hist(results_df['高风险概率(%)'], bins=20, color='#a23b72', alpha=0.7, edgecolor='black')
+                    axes[1].set_xlabel('高风险概率(%)', fontsize=12, fontweight='bold')
+                    axes[1].set_ylabel('患者数量', fontsize=12, fontweight='bold')
+                    axes[1].set_title('高风险概率分布', fontsize=13, fontweight='bold')
+                    axes[1].grid(axis='y', alpha=0.3)
+
+                    display_figure_safe(fig)
+
+                    csv = results_df.to_csv(index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        label="📥 下载预测结果 (CSV)",
+                        data=csv,
+                        file_name="batch_prediction_results.csv",
+                        mime="text/csv"
+                    )
+
+                except Exception as e:
+                    st.error(f"预测错误: {str(e)}")
+                    import traceback
+                    st.error(traceback.format_exc())
+
+        except Exception as e:
+            st.error(f"数据加载错误: {str(e)}")
+
+# ============================================================================
+# 页面3: 模型说明
+# ============================================================================
+
+elif selected == "模型说明":
+
+    st.markdown("### 模型详细说明")
+
+    col_info1, col_info2 = st.columns(2)
+
+    with col_info1:
+        st.markdown("""
+#### 📊 模型基本信息
+
+**算法类型:** XGBoost (Extreme Gradient Boosting)
+
+**目标预测:** 造血干细胞移植患儿出院后30天内再入院风险
+
+**输出形式:**
+- 风险分类: 低风险 / 高风险
+- 风险概率: 0-100%
+
+**模型性能:**
+- 测试集 AUC: 0.85+
+- 灵敏度: 80%+
+- 特异性: 75%+
+        """)
+
+    with col_info2:
+        st.markdown("""
+#### 📝 输入变量说明
+
+**连续变量 (3个):**
+- 中性粒细胞植入时间
+- 出院时淋巴细胞绝对值
+- 住院时长
+
+**分类变量 (5个):**
+- 诊断疾病类型
+- 供体来源
+- 出院季节
+- 是否使用MSC
+- HLA相合度
+        """)
+
+    st.markdown("---")
+
+    st.markdown("""
+#### 💡 临床应用指南
+
+**模型目的:**
+- 识别高风险再入院患者
+- 为临床决策提供数据支持
+- 指导出院后管理策略
+
+**使用注意事项:**
+
+**🔴 重要提示**
+1. 本模型是辅助诊断工具，不能替代临床医学判断
+2. 预测结果应结合患儿的具体临床情况综合分析
+3. 医生应基于专业知识和临床经验做出最终决策
+4. 对于高风险患者，应加强监测和随访
+5. 如预测不符合临床直觉，应进一步评估
+
+**✅ 最佳实践**
+- 使用模型预测作为风险分层的参考
+- 结合临床经验调整管理策略
+- 定期评估模型预测准确性
+- 收集反馈意见持续改进模型
+    """)
+
+    st.markdown("---")
+    st.markdown(f"**模型期望特征数量:** {len(expected_features)}")
+
+# ============================================================================
+# 页面4: 特征分析
+# ============================================================================
+
+elif selected == "特征分析":
+
+    st.markdown("### 特征分析与可视化")
+
+    @st.cache_data
+    def load_test_data():
+        try:
+            return pd.read_csv('X_test.csv')
+        except:
+            return None
+
+    X_test_raw = load_test_data()
+
+    if X_test_raw is not None:
+        st.info(f"已加载测试数据集，共 {len(X_test_raw)} 条记录")
+
+        st.markdown("#### 特征统计")
+        st.write("**原始数据统计:**")
+        st.dataframe(X_test_raw.describe(), use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("#### 连续特征相关性分析")
+
+        continuous_cols = [col for col in X_test_raw.columns if col in continuous_features]
+        
+        if len(continuous_cols) > 1:
+            corr_matrix = X_test_raw[continuous_cols].corr()
+
+            fig, ax = plt.subplots(figsize=(9, 7))
+            
+            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0,
+                        fmt='.2f', square=True, ax=ax, cbar_kws={'label': '相关系数'},
+                        annot_kws={'fontsize': 12, 'weight': 'bold'})
+            ax.set_title('连续变量相关性矩阵', fontsize=13, fontweight='bold', pad=15)
+
+            display_figure_safe(fig)
+        else:
+            st.warning("连续变量不足，无法进行相关性分析")
+
+        st.markdown("---")
+        st.markdown("#### 特征分布")
+
+        for col in continuous_cols:
+            fig, ax = plt.subplots(figsize=(11, 5))
+            ax.hist(X_test_raw[col], bins=30, color='#1f77b4', alpha=0.7, edgecolor='black', linewidth=1.2)
+            ax.set_xlabel(col, fontsize=12, fontweight='bold')
+            ax.set_ylabel('频次', fontsize=12, fontweight='bold')
+            ax.set_title(f'{col} 分布', fontsize=13, fontweight='bold')
+            ax.grid(axis='y', alpha=0.3)
+
+            display_figure_safe(fig)
+
+    else:
+        st.warning("未找到 X_test.csv 文件，无法进行特征分析")
+
+# ============================================================================
+# 页面5: 关于系统
+# ============================================================================
+
+elif selected == "关于系统":
+
+    st.markdown("### 关于本系统")
+
+    col_info1, col_info2 = st.columns(2)
+
+    with col_info1:
+        st.markdown("""
+#### 📊 模型基本信息
+
+**算法类型:** XGBoost (Extreme Gradient Boosting)
+
+**目标预测:** 造血干细胞移植患儿出院后30天内再入院风险
+
+**输出形式:**
+- 风险分类: 低风险 / 高风险
+- 风险概率: 0-100%
+
+**模型性能:**
+- 测试集 AUC: 0.85+
+- 灵敏度: 80%+
+- 特异性: 75%+
+        """)
+
+    with col_info2:
+        st.markdown("""
+#### 📝 输入变量说明
+
+**连续变量 (3个):**
+- 中性粒细胞植入时间
+- 出院时淋巴细胞绝对值
+- 住院时长
+
+**分类变量 (5个):**
+- 诊断疾病类型
+- 供体来源
+- 出院季节
+- 是否使用MSC
+- HLA相合度
+        """)
+
+    st.markdown("---")
+
+    st.markdown("""
+#### 🔧 系统核心功能
+
+**主要功能:**
+- 单个患者实时预测
+- 批量数据导入预测
+- 模型解释性分析 (SHAP)
+- 特征统计与可视化
+- 个性化临床建议
+
+**技术栈:**
+- 前端框架: Streamlit
+- 机器学习: XGBoost
+- 数据处理: Pandas, NumPy
+- 可视化: Matplotlib, Seaborn
+- 模型解释: SHAP
+    """)
+
+    st.markdown("---")
+
+    st.markdown(f"""
+#### ℹ️ 版本信息
+
+- **系统版本:** v1.5.0 (完整中文字体显示版)
+- **最后更新:** 2026年2月
+- **主要改进:**
+  - ✅ 增强matplotlib中文字体配置
+  - ✅ 自动字体检测与加载
+  - ✅ 多层备选字体方案
+  - ✅ 修复图表标签截断问题
+  - ✅ 优化布局防止显示不完整
+  - ✅ 改进图表保存与显示方式
+
+#### 📋 法律声明
+
+**免责声明:**
+- 本系统仅供医疗专业人士参考使用
+- 预测结果不构成医学诊断或治疗建议
+- 医生应基于个人专业知识和临床经验做出最终决策
+- 对于高风险患者，应加强监测和随访
+- 如预测不符合临床直觉，应进一步评估
+
+**模型特征数:** {len(expected_features)}
+    """)
+
+# ============================================================================
 # 页脚
+# ============================================================================
+
 st.markdown("---")
 st.markdown(
-    """
-    <div style='text-align: center; color: gray;'>
-        <p>机器学习预测系统 v1.0 | Powered by Streamlit</p>
-    </div>
-    """,
+    "<div style='text-align: center; color: #666; font-size: 12px; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif;'>"
+    "<p>造血干细胞移植患儿再入院风险预测系统 | 版本 v1.5.0</p>"
+    "<p>⚠️ 免责声明: 本系统仅供医疗专业人士参考，不能替代医学诊断</p>"
+    "</div>",
     unsafe_allow_html=True
 )
