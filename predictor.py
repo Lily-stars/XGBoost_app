@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # ============================================================================
-# predictor.py (修复版 v1.4.1 - 完全兼容Streamlit Cloud)
+# predictor.py (修复版 v1.4.2 - 字体完整显示)
 # ============================================================================
 
 import joblib
@@ -14,16 +14,51 @@ import warnings
 import streamlit as st
 from streamlit_option_menu import option_menu
 import seaborn as sns
+import os
 
-# 中文字体配置
-matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
-matplotlib.rcParams['axes.unicode_minus'] = False
-matplotlib.rcParams['font.size'] = 11
+# ============================================================================
+# 字体配置 - 增强版（优先级更高）
+# ============================================================================
+
+def setup_matplotlib_fonts():
+    """配置matplotlib字体，确保中文正确显示"""
+    
+    # 方案1: 尝试使用系统字体
+    font_names = ['SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 
+                  'DejaVu Sans', 'STHeiti', 'STKaiti', 'Heiti TC']
+    
+    available_fonts = [f for f in font_names if f in fm.get_font_names()]
+    
+    if available_fonts:
+        matplotlib.rcParams['font.sans-serif'] = available_fonts
+    else:
+        # 方案2: 使用默认字体列表（包含多个备选）
+        matplotlib.rcParams['font.sans-serif'] = [
+            'SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei',
+            'DejaVu Sans', 'Arial Unicode MS', 'sans-serif'
+        ]
+    
+    # 关键配置：防止负号显示问题
+    matplotlib.rcParams['axes.unicode_minus'] = False
+    
+    # 设置字体大小
+    matplotlib.rcParams['font.size'] = 11
+    
+    # 增强图表渲染质量
+    matplotlib.rcParams['figure.dpi'] = 100
+    matplotlib.rcParams['savefig.dpi'] = 100
+    matplotlib.rcParams['font.weight'] = 'bold'
+    
+    # 解决图表显示不完整的问题
+    matplotlib.rcParams['axes.labelsize'] = 11
+    matplotlib.rcParams['xtick.labelsize'] = 10
+    matplotlib.rcParams['ytick.labelsize'] = 10
+    matplotlib.rcParams['legend.fontsize'] = 10
+
+# 在模块加载时执行字体配置
+setup_matplotlib_fonts()
 
 warnings.filterwarnings('ignore')
-
-
-
 
 st.set_page_config(
     page_title="造血干细胞移植患儿再入院预测模型",
@@ -453,6 +488,9 @@ if selected == "预测中心":
             ax_prob.spines['right'].set_visible(False)
             ax_prob.spines['left'].set_visible(False)
             ax_prob.set_yticks([])
+            
+            # 调整布局防止标签被截断
+            plt.tight_layout()
 
             st.pyplot(fig_prob, use_container_width=True)
             plt.close()
@@ -561,10 +599,13 @@ if selected == "预测中心":
                 
                 ax.barh(range(len(top_features)), top_importance, color='#1f77b4')
                 ax.set_yticks(range(len(top_features)))
-                ax.set_yticklabels(top_features)
+                ax.set_yticklabels(top_features, fontsize=10)
                 ax.set_xlabel('平均SHAP值的绝对值', fontsize=11, fontweight='bold')
                 ax.set_title('Top 10 特征重要性 (SHAP)', fontsize=12, fontweight='bold', pad=10)
                 ax.invert_yaxis()
+                
+                # 调整布局防止标签被截断
+                plt.tight_layout()
                 
                 st.pyplot(fig, use_container_width=True)
                 plt.close()
@@ -688,7 +729,7 @@ elif selected == "批量预测":
                     risk_counts = results_df['预测标签'].value_counts()
                     colors = ['#51cf66', '#ff6b6b']
                     axes[0].pie(risk_counts.values, labels=risk_counts.index, autopct='%1.1f%%',
-                                colors=colors, startangle=90)
+                                colors=colors, startangle=90, textprops={'fontsize': 11})
                     axes[0].set_title('风险等级分布', fontsize=12, fontweight='bold')
 
                     # 直方图
@@ -845,8 +886,13 @@ elif selected == "特征分析":
             fig, ax = plt.subplots(figsize=(8, 6))
             
             sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0,
-                        fmt='.2f', square=True, ax=ax, cbar_kws={'label': '相关系数'})
+                        fmt='.2f', square=True, ax=ax, cbar_kws={'label': '相关系数'},
+                        annot_kws={'fontsize': 11})
             ax.set_title('连续变量相关性矩阵', fontsize=12, fontweight='bold', pad=10)
+            
+            # 调整布局防止标签被截断
+            plt.tight_layout()
+            
             st.pyplot(fig, use_container_width=True)
             plt.close()
         else:
@@ -863,6 +909,10 @@ elif selected == "特征分析":
             ax.set_ylabel('频次', fontsize=11, fontweight='bold')
             ax.set_title(f'{col} 分布', fontsize=12, fontweight='bold')
             ax.grid(axis='y', alpha=0.3)
+            
+            # 调整布局防止标签被截断
+            plt.tight_layout()
+            
             st.pyplot(fig, use_container_width=True)
             plt.close()
 
@@ -980,13 +1030,13 @@ elif selected == "关于系统":
     st.markdown(f"""
 #### 版本信息
 
-- **系统版本:** v1.1.0 (简化版 - 无需 feature_names.pkl)
+- **系统版本:** v1.4.2 (字体完整显示版)
 - **最后更新:** 2026年2月
 - **主要改进:**
-  - 直接从模型获取特征名称
-  - 移除对 feature_names.pkl 的依赖
-  - 更简洁可靠的特征加载机制
-  - 完整的错误处理和调试支持
+  - 增强matplotlib中文字体配置
+  - 添加多字体备选方案
+  - 修复图表标签截断问题
+  - 优化布局防止显示不完整
 
 #### 模型特征详情
 
@@ -1008,7 +1058,7 @@ elif selected == "关于系统":
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: #666; font-size: 12px;'>"
-    "<p>造血干细胞移植患儿再入院风险预测系统 | 版本 v1.1.0</p>"
+    "<p>造血干细胞移植患儿再入院风险预测系统 | 版本 v1.4.2</p>"
     "<p>免责声明: 本系统仅供医疗专业人士参考,不能替代医学诊断</p>"
     "</div>",
     unsafe_allow_html=True
