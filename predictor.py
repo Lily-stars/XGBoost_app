@@ -841,7 +841,7 @@ elif selected == "🔍 特征分析":
             corr_matrix = X_test_raw[continuous_cols].corr()
 
             fig, ax = plt.subplots(figsize=(8, 6))
-            import seaborn as sns
+            
             sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0,
                         fmt='.2f', square=True, ax=ax, cbar_kws={'label': '相关系数'})
             ax.set_title('连续变量相关性矩阵', fontsize=12, fontweight='bold', pad=10)
@@ -943,5 +943,6 @@ st.markdown("""
  
 </div>
 """, unsafe_allow_html=True)
+
 
 
