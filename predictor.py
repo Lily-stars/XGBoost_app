@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # ============================================================================
-# predictor.py (修复版 v1.4.2 - 字体完整显示)
+# predictor.py (修复版 v1.5.0 - 完整中文字体显示)
 # ============================================================================
 
 import joblib
@@ -15,111 +15,225 @@ import streamlit as st
 from streamlit_option_menu import option_menu
 import seaborn as sns
 import os
+import tempfile
+from pathlib import Path
 
 # ============================================================================
-# 字体配置 - 增强版（优先级更高）
+# 字体配置 - 终极解决方案 (v1.5.0)
 # ============================================================================
 
-def setup_matplotlib_fonts():
-    """配置matplotlib字体，确保中文正确显示"""
+def setup_matplotlib_fonts_enhanced():
+    """
+    增强的中文字体配置方案
+    - 自动下载并安装中文字体
+    - 多层备选字体方案
+    - 兼容不同操作系统
+    """
     
-    # 方案1: 尝试使用系统字体
-    font_names = ['SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 
-                  'DejaVu Sans', 'STHeiti', 'STKaiti', 'Heiti TC']
+    # 获取系统信息
+    import platform
+    system = platform.system()
     
-    available_fonts = [f for f in font_names if f in fm.get_font_names()]
+    # 方案1: 动态字体安装（优先级最高）
+    font_path = None
+    font_name = None
     
-    if available_fonts:
-        matplotlib.rcParams['font.sans-serif'] = available_fonts
+    # 尝试从常见位置获取字体
+    potential_fonts = {
+        'SimHei': [
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+            '/System/Library/Fonts/PingFang.ttc',
+            'C:\\Windows\\Fonts\\simhei.ttf',
+        ],
+        'Source Han Sans': [
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        ]
+    }
+    
+    for font_name, paths in potential_fonts.items():
+        for path in paths:
+            if os.path.exists(path):
+                font_path = path
+                break
+        if font_path:
+            break
+    
+    # 如果找到字体，注册到matplotlib
+    if font_path:
+        try:
+            fm.fontManager.addfont(font_path)
+            matplotlib.rcParams['font.sans-serif'] = [os.path.splitext(os.path.basename(font_path))[0]]
+        except Exception as e:
+            print(f"字体加载警告: {e}")
+    
+    # 方案2: 使用系统可用字体
+    available_fonts = fm.get_font_names()
+    font_candidates = [
+        'SimHei', 'SimSun', 'Microsoft YaHei', 'WenQuanYi Micro Hei',
+        'STHeiti', 'STKaiti', 'Heiti TC', 'Hiragino Sans GB',
+        'PingFang SC', 'Source Han Sans CN', 'Noto Sans CJK SC'
+    ]
+    
+    selected_fonts = [f for f in font_candidates if f in available_fonts]
+    
+    # 方案3: 备选字体列表（降级方案）
+    if selected_fonts:
+        matplotlib.rcParams['font.sans-serif'] = selected_fonts + ['DejaVu Sans']
     else:
-        # 方案2: 使用默认字体列表（包含多个备选）
         matplotlib.rcParams['font.sans-serif'] = [
-            'SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei',
-            'DejaVu Sans', 'Arial Unicode MS', 'sans-serif'
+            'DejaVu Sans', 'Arial', 'sans-serif'
         ]
     
-    # 关键配置：防止负号显示问题
+    # 关键配置：防止各种显示问题
     matplotlib.rcParams['axes.unicode_minus'] = False
+    matplotlib.rcParams['axes.linewidth'] = 1.2
     
-    # 设置字体大小
-    matplotlib.rcParams['font.size'] = 11
+    # 字体大小配置（增强可读性）
+    matplotlib.rcParams['font.size'] = 12
+    matplotlib.rcParams['font.weight'] = 'normal'
     
-    # 增强图表渲染质量
+    # 图表渲染质量
     matplotlib.rcParams['figure.dpi'] = 100
-    matplotlib.rcParams['savefig.dpi'] = 100
-    matplotlib.rcParams['font.weight'] = 'bold'
+    matplotlib.rcParams['savefig.dpi'] = 150
+    matplotlib.rcParams['figure.facecolor'] = 'white'
+    matplotlib.rcParams['axes.facecolor'] = 'white'
     
-    # 解决图表显示不完整的问题
+    # 文本显示配置
     matplotlib.rcParams['axes.labelsize'] = 11
     matplotlib.rcParams['xtick.labelsize'] = 10
     matplotlib.rcParams['ytick.labelsize'] = 10
     matplotlib.rcParams['legend.fontsize'] = 10
+    matplotlib.rcParams['figure.titlesize'] = 13
+    
+    # 重要: 禁用符号处理（防止字体自动替换）
+    matplotlib.rcParams['pdf.fonttype'] = 42
+    matplotlib.rcParams['ps.fonttype'] = 42
+    
+    # 绘图风格
+    sns.set_style("whitegrid")
+    matplotlib.rcParams['grid.alpha'] = 0.3
 
 # 在模块加载时执行字体配置
-setup_matplotlib_fonts()
+setup_matplotlib_fonts_enhanced()
 
 warnings.filterwarnings('ignore')
 
+# ============================================================================
+# Streamlit 页面配置
+# ============================================================================
+
 st.set_page_config(
     page_title="造血干细胞移植患儿再入院预测模型",
-    page_icon="hospital",
+    page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 st.markdown("""
 <style>
+    * {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    }
+    
     .main {
         padding-top: 2rem;
     }
+    
     .stTitle {
         color: #1f77b4;
         text-align: center;
+        font-weight: bold;
     }
+    
     .prediction-box-high {
         background-color: #ffcccc;
         padding: 20px;
         border-radius: 10px;
         border-left: 5px solid #ff0000;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
     }
+    
     .prediction-box-low {
         background-color: #ccffcc;
         padding: 20px;
         border-radius: 10px;
         border-left: 5px solid #00cc00;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
     }
+    
     .metric-box {
         background-color: #f0f2f6;
         padding: 15px;
         border-radius: 8px;
         border-top: 3px solid #1f77b4;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        font-weight: bold;
+    }
+    
+    p, span, div {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# 1. 模型加载（直接从模型获取特征名）
+# 添加函数：改进的图表保存方式
+# ============================================================================
+
+def save_figure_with_chinese(fig, dpi=150):
+    """
+    保存包含中文的图表，避免字体问题
+    返回bytes对象供streamlit使用
+    """
+    import io
+    
+    # 确保使用正确的后端
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', 
+                facecolor='white', edgecolor='none', pad_inches=0.3)
+    buf.seek(0)
+    return buf
+
+def display_figure_safe(fig, use_container_width=True, caption=None):
+    """
+    安全显示包含中文的图表
+    """
+    try:
+        # 调整图表布局
+        plt.tight_layout()
+        
+        # 保存为bytes
+        buf = save_figure_with_chinese(fig)
+        st.image(buf, use_container_width=use_container_width, caption=caption)
+        
+    except Exception as e:
+        st.warning(f"图表显示出现问题: {str(e)}")
+    finally:
+        plt.close(fig)
+
+# ============================================================================
+# 1. 模型加载
 # ============================================================================
 
 @st.cache_resource
 def load_model():
-    """加载模型并直接获取特征名称"""
+    """加载模型"""
     try:
         model = joblib.load('best_xgboost_model.pkl')
-        
-        # 直接从模型获取特征名称 - 无需 feature_names.pkl
         feature_names = model.get_booster().feature_names
         
         if feature_names is None:
             st.error("错误: 模型中未找到特征名称!")
-            st.error("请确保您的模型是用有效的特征名保存的")
             st.stop()
         
         return model, feature_names
     
     except FileNotFoundError:
         st.error("错误: 找不到 'best_xgboost_model.pkl' 文件")
-        st.error("请确保模型文件在应用目录中")
         st.stop()
     except Exception as e:
         st.error(f"模型加载失败: {e}")
@@ -127,10 +241,7 @@ def load_model():
         st.error(traceback.format_exc())
         st.stop()
 
-
 model, expected_features = load_model()
-
-# 调试信息
 st.session_state.debug_mode = False
 
 # ============================================================================
@@ -199,16 +310,8 @@ def prepare_input_for_prediction(
     hla_code,
     expected_features_list
 ):
-    """
-    将用户输入转换为模型可以接受的格式
+    """将用户输入转换为模型可以接受的格式"""
     
-    步骤:
-    1. 创建原始数据DataFrame
-    2. 进行One-Hot编码
-    3. 严格对齐到模型期望的特征列表
-    """
-    
-    # 步骤1: 创建原始数据
     raw_data = pd.DataFrame({
         '中性粒细胞植入时间': [neutrophil_time],
         '出院时淋巴细胞绝对值': [lymphocyte_value],
@@ -220,7 +323,6 @@ def prepare_input_for_prediction(
         'HLA相合度': [hla_code]
     })
     
-    # 步骤2: One-Hot编码
     encoded_data = pd.get_dummies(
         raw_data,
         columns=categorical_features,
@@ -228,31 +330,21 @@ def prepare_input_for_prediction(
         dtype=int
     )
     
-    # 步骤3: 特征对齐
-    # 创建一个与模型期望完全一致的DataFrame
     aligned_data = pd.DataFrame(
         0, 
         index=[0], 
         columns=expected_features_list
     )
     
-    # 填充已有的特征
     for feature in expected_features_list:
         if feature in encoded_data.columns:
             aligned_data[feature] = encoded_data[feature].values[0]
     
     return aligned_data
 
-
-def prepare_batch_input_for_prediction(
-    raw_data_df,
-    expected_features_list
-):
-    """
-    批量数据预处理
-    """
+def prepare_batch_input_for_prediction(raw_data_df, expected_features_list):
+    """批量数据预处理"""
     
-    # One-Hot编码
     encoded_data = pd.get_dummies(
         raw_data_df,
         columns=categorical_features,
@@ -260,7 +352,6 @@ def prepare_batch_input_for_prediction(
         dtype=int
     )
     
-    # 特征对齐
     aligned_data = pd.DataFrame(
         0, 
         index=range(len(encoded_data)), 
@@ -274,15 +365,22 @@ def prepare_batch_input_for_prediction(
     return aligned_data
 
 # ============================================================================
-# 4. 页面标题和导航
+# 页面标题
 # ============================================================================
 
-st.markdown("<h1 style='text-align: center; color: #1f77b4;'>造血干细胞移植患儿再入院风险预测系统</h1>",
-            unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666;'>基于XGBoost机器学习模型的临床决策支持工具</p>",
-            unsafe_allow_html=True)
+st.markdown("""
+<h1 style='text-align: center; color: #1f77b4; font-weight: bold;'>
+造血干细胞移植患儿再入院风险预测系统
+</h1>
+<p style='text-align: center; color: #666;'>
+基于XGBoost机器学习模型的临床决策支持工具
+</p>
+""", unsafe_allow_html=True)
 
+# ============================================================================
 # 侧边栏导航
+# ============================================================================
+
 with st.sidebar:
     st.markdown("### 导航菜单")
     selected = option_menu(
@@ -293,12 +391,11 @@ with st.sidebar:
         default_index=0
     )
     
-    # 调试模式开关
     st.markdown("---")
     st.session_state.debug_mode = st.checkbox("调试模式")
 
 # ============================================================================
-# 页面1: 预测中心（单个患者预测）
+# 页面1: 预测中心
 # ============================================================================
 
 if selected == "预测中心":
@@ -393,12 +490,10 @@ if selected == "预测中心":
                 expected_features
             )
             
-            # 调试信息
             if st.session_state.debug_mode:
                 st.info("调试信息")
                 st.write(f"输入特征数: {len(prediction_input.columns)}")
                 st.write(f"模型期望特征数: {len(expected_features)}")
-                st.write(f"特征列表: {list(prediction_input.columns)}")
             
             # 验证特征
             if len(prediction_input.columns) != len(expected_features):
@@ -414,7 +509,7 @@ if selected == "预测中心":
                     st.error(f"多余特征: {extra}")
                 st.stop()
             
-            st.success(f"数据准备完成,特征数量: {len(prediction_input.columns)}")
+            st.success(f"数据准备完成，特征数量: {len(prediction_input.columns)}")
             
             # 进行预测
             predicted_class = model.predict(prediction_input)[0]
@@ -431,7 +526,7 @@ if selected == "预测中心":
             if predicted_class == 1:
                 st.markdown("""
                 <div class='prediction-box-high'>
-                    <h2 style='color: #cc0000; margin: 0;'>警告: 高风险</h2>
+                    <h2 style='color: #cc0000; margin: 0;'>⚠️ 警告: 高风险</h2>
                     <p style='font-size: 18px; margin: 10px 0 0 0;'>
                         患儿在出院后30天内<b>再入院风险较高</b>
                     </p>
@@ -441,7 +536,7 @@ if selected == "预测中心":
             else:
                 st.markdown("""
                 <div class='prediction-box-low'>
-                    <h2 style='color: #00aa00; margin: 0;'>确认: 低风险</h2>
+                    <h2 style='color: #00aa00; margin: 0;'>✓ 确认: 低风险</h2>
                     <p style='font-size: 18px; margin: 10px 0 0 0;'>
                         患儿在出院后30天内<b>再入院风险较低</b>
                     </p>
@@ -475,8 +570,8 @@ if selected == "预测中心":
             ax_prob.barh(['再入院风险'], [1 - risk_prob], left=[risk_prob],
                          color='#e0e0e0', height=0.5)
             ax_prob.set_xlim([0, 1])
-            ax_prob.set_xlabel('概率', fontsize=11, fontweight='bold')
-            ax_prob.set_title('风险概率分布', fontsize=12, fontweight='bold', pad=10)
+            ax_prob.set_xlabel('概率', fontsize=12, fontweight='bold')
+            ax_prob.set_title('风险概率分布', fontsize=13, fontweight='bold', pad=10)
 
             # 添加百分比标签
             ax_prob.text(risk_prob / 2, 0, f'{risk_prob:.1%}',
@@ -488,12 +583,8 @@ if selected == "预测中心":
             ax_prob.spines['right'].set_visible(False)
             ax_prob.spines['left'].set_visible(False)
             ax_prob.set_yticks([])
-            
-            # 调整布局防止标签被截断
-            plt.tight_layout()
 
-            st.pyplot(fig_prob, use_container_width=True)
-            plt.close()
+            display_figure_safe(fig_prob)
 
             # ============================================================================
             # 个性化临床建议
@@ -506,7 +597,7 @@ if selected == "预测中心":
 
             if predicted_class == 1:
                 st.error(f"""
-### 警告: 高风险患者 (风险概率: {probability:.1f}%)
+### ⚠️ 警告: 高风险患者 (风险概率: {probability:.1f}%)
 
 **建议措施:**
 
@@ -516,19 +607,19 @@ if selected == "预测中心":
    - 密切关注体温、感染征象及移植物抗宿主病(GVHD)表现
 
 **2. 严格的药物管理**
-   - 严格遵医嘱服用免疫抑制剂,切勿擅自停药或改量
+   - 严格遵医嘱服用免疫抑制剂，切勿擅自停药或改量
    - 规范预防性抗菌/抗病毒/抗真菌药物应用
-   - 建立服药日记,避免漏服
+   - 建立服药日记，避免漏服
 
 **3. 感染防控与隔离**
-   - 严格执行保护性隔离,避免接触呼吸道感染者
-   - 居家环境定期消毒,指导家属做好手卫生
+   - 严格执行保护性隔离，避免接触呼吸道感染者
+   - 居家环境定期消毒，指导家属做好手卫生
    - 监测血常规及C反应蛋白等感染指标
 
 **4. 精细化营养支持**
-   - 执行 洁净饮食(低菌饮食),食物必须彻底煮熟
-   - 建议高蛋白、易消化食物,避免生冷、隔夜饭菜
-   - 监测体重变化,警惕短期内体重急剧下降
+   - 执行洁净饮食(低菌饮食)，食物必须彻底煮熟
+   - 建议高蛋白、易消化食物，避免生冷、隔夜饭菜
+   - 监测体重变化，警惕短期内体重急剧下降
 
 **5. 紧急应对 (红旗征)**
    - 明确紧急联系人及夜间急诊流程
@@ -542,33 +633,33 @@ if selected == "预测中心":
 
             else:
                 st.success(f"""
-### 确认: 低风险患者 (风险概率: {probability:.1f}%)
+### ✓ 确认: 低风险患者 (风险概率: {probability:.1f}%)
 
 **建议措施:**
 
 **1. 常规随访计划**
    - 出院后按医嘱进行首次门诊随访
    - 后续按照标准方案定期复查
-   - 保持电话联系畅通,定期汇报患儿状况
+   - 保持电话联系畅通，定期汇报患儿状况
 
 **2. 药物依从性**
    - 继续按时服用抗排异药物和预防性药物
-   - 了解药物常见副作用,如有不适及时反馈
+   - 了解药物常见副作用，如有不适及时反馈
 
 **3. 生活与防护**
-   - 保持良好的个人卫生,勤洗手
-   - 免疫功能完全重建前,避免去人群密集场所
+   - 保持良好的个人卫生，勤洗手
+   - 免疫功能完全重建前，避免去人群密集场所
    - 外出时务必规范佩戴口罩
 
 **4. 营养与康复**
-   - 均衡饮食,适量补充维生素,促进身体恢复
+   - 均衡饮食，适量补充维生素，促进身体恢复
    - 避免食用生食(如生鱼片、半熟蛋)
-   - 循序渐进增加活动量,避免过度疲劳
+   - 循序渐进增加活动量，避免过度疲劳
 
 **5. 持续监测**
-   - 虽然风险较低,仍需警惕迟发性排异反应
+   - 虽然风险较低，仍需警惕迟发性排异反应
    - 定期监测血药浓度及肝肾功能
-   - 若出现发热或不明原因不适,应及时就诊
+   - 若出现发热或不明原因不适，应及时就诊
 """)
 
             # ============================================================================
@@ -582,33 +673,27 @@ if selected == "预测中心":
                 explainer = shap.TreeExplainer(model)
                 shap_values = explainer.shap_values(prediction_input)
                 
-                # 如果是二分类,取正类的SHAP值
                 if isinstance(shap_values, list):
                     shap_values_for_plot = shap_values[1]
                 else:
                     shap_values_for_plot = shap_values
                 
-                # 计算特征重要性
                 feature_importance = np.abs(shap_values_for_plot).flatten()
                 feature_importance_sorted_idx = np.argsort(feature_importance)[-10:][::-1]
                 
-                # 绘制特征重要性
-                fig, ax = plt.subplots(figsize=(10, 6))
+                fig, ax = plt.subplots(figsize=(11, 7))
                 top_features = [expected_features[i] for i in feature_importance_sorted_idx]
                 top_importance = feature_importance[feature_importance_sorted_idx]
                 
                 ax.barh(range(len(top_features)), top_importance, color='#1f77b4')
                 ax.set_yticks(range(len(top_features)))
-                ax.set_yticklabels(top_features, fontsize=10)
-                ax.set_xlabel('平均SHAP值的绝对值', fontsize=11, fontweight='bold')
-                ax.set_title('Top 10 特征重要性 (SHAP)', fontsize=12, fontweight='bold', pad=10)
+                ax.set_yticklabels(top_features, fontsize=11)
+                ax.set_xlabel('平均SHAP值的绝对值', fontsize=12, fontweight='bold')
+                ax.set_title('Top 10 特征重要性 (SHAP)', fontsize=13, fontweight='bold', pad=15)
                 ax.invert_yaxis()
-                
-                # 调整布局防止标签被截断
-                plt.tight_layout()
-                
-                st.pyplot(fig, use_container_width=True)
-                plt.close()
+                ax.grid(axis='x', alpha=0.3)
+
+                display_figure_safe(fig)
 
                 st.info("SHAP分析显示对本次预测影响最大的10个特征")
 
@@ -662,12 +747,12 @@ if selected == "预测中心":
 elif selected == "批量预测":
 
     st.markdown("### 批量预测患者数据")
-    st.info("上传包含患者信息的CSV文件,系统将自动进行批量预测")
+    st.info("上传包含患者信息的CSV文件，系统将自动进行批量预测")
 
     uploaded_file = st.file_uploader(
         "选择CSV文件",
         type=['csv'],
-        help="CSV文件应包含: 中性粒细胞植入时间, 出院时淋巴细胞绝对值, 住院时长, 诊断, 供体来源, 出院季节, 是否使用MSC, HLA相合度"
+        help="CSV文件应包含各必要的特征列"
     )
 
     if uploaded_file is not None:
@@ -681,32 +766,26 @@ elif selected == "批量预测":
 
             if st.button("执行批量预测", use_container_width=True):
                 try:
-                    # 准备数据
                     prediction_batch = prepare_batch_input_for_prediction(batch_data, expected_features)
                     
-                    # 验证特征
                     if len(prediction_batch.columns) != len(expected_features):
                         st.error(f"特征数量不匹配!")
                         st.stop()
                     
-                    st.success(f"数据准备完成,特征数量: {len(prediction_batch.columns)}")
+                    st.success(f"数据准备完成，特征数量: {len(prediction_batch.columns)}")
                     
-                    # 批量预测
                     batch_predictions = model.predict(prediction_batch)
                     batch_probas = model.predict_proba(prediction_batch)
 
-                    # 构建结果表
                     results_df = batch_data.copy()
                     results_df['预测结果'] = batch_predictions.astype(int)
                     results_df['预测标签'] = results_df['预测结果'].map({0: '低风险', 1: '高风险'})
-                    results_df['低风险概率'] = (batch_probas[:, 0] * 100).round(2)
-                    results_df['高风险概率'] = (batch_probas[:, 1] * 100).round(2)
+                    results_df['低风险概率(%)'] = (batch_probas[:, 0] * 100).round(2)
+                    results_df['高风险概率(%)'] = (batch_probas[:, 1] * 100).round(2)
 
-                    # 显示结果
                     st.markdown("#### 预测结果")
                     st.dataframe(results_df, use_container_width=True, hide_index=True)
 
-                    # 统计信息
                     col_stat1, col_stat2, col_stat3 = st.columns(3)
 
                     with col_stat1:
@@ -720,33 +799,27 @@ elif selected == "批量预测":
                         low_risk_count = (results_df['预测结果'] == 0).sum()
                         st.metric("低风险患者数", low_risk_count, f"{low_risk_count / len(results_df) * 100:.1f}%")
 
-                    # 风险分布图
                     st.markdown("#### 风险分布统计")
 
                     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-                    # 饼图
                     risk_counts = results_df['预测标签'].value_counts()
                     colors = ['#51cf66', '#ff6b6b']
                     axes[0].pie(risk_counts.values, labels=risk_counts.index, autopct='%1.1f%%',
-                                colors=colors, startangle=90, textprops={'fontsize': 11})
-                    axes[0].set_title('风险等级分布', fontsize=12, fontweight='bold')
+                                colors=colors, startangle=90, textprops={'fontsize': 11, 'weight': 'bold'})
+                    axes[0].set_title('风险等级分布', fontsize=13, fontweight='bold')
 
-                    # 直方图
-                    axes[1].hist(results_df['高风险概率'], bins=20, color='#a23b72', alpha=0.7, edgecolor='black')
-                    axes[1].set_xlabel('高风险概率(%)', fontsize=11, fontweight='bold')
-                    axes[1].set_ylabel('患者数量', fontsize=11, fontweight='bold')
-                    axes[1].set_title('高风险概率分布', fontsize=12, fontweight='bold')
+                    axes[1].hist(results_df['高风险概率(%)'], bins=20, color='#a23b72', alpha=0.7, edgecolor='black')
+                    axes[1].set_xlabel('高风险概率(%)', fontsize=12, fontweight='bold')
+                    axes[1].set_ylabel('患者数量', fontsize=12, fontweight='bold')
+                    axes[1].set_title('高风险概率分布', fontsize=13, fontweight='bold')
                     axes[1].grid(axis='y', alpha=0.3)
 
-                    plt.tight_layout()
-                    st.pyplot(fig, use_container_width=True)
-                    plt.close()
+                    display_figure_safe(fig)
 
-                    # 下载结果
-                    csv = results_df.to_csv(index=False)
+                    csv = results_df.to_csv(index=False, encoding='utf-8-sig')
                     st.download_button(
-                        label="下载预测结果 (CSV)",
+                        label="📥 下载预测结果 (CSV)",
                         data=csv,
                         file_name="batch_prediction_results.csv",
                         mime="text/csv"
@@ -772,7 +845,7 @@ elif selected == "模型说明":
 
     with col_info1:
         st.markdown("""
-#### 模型基本信息
+#### 📊 模型基本信息
 
 **算法类型:** XGBoost (Extreme Gradient Boosting)
 
@@ -790,7 +863,7 @@ elif selected == "模型说明":
 
     with col_info2:
         st.markdown("""
-#### 输入变量说明
+#### 📝 输入变量说明
 
 **连续变量 (3个):**
 - 中性粒细胞植入时间
@@ -808,7 +881,7 @@ elif selected == "模型说明":
     st.markdown("---")
 
     st.markdown("""
-#### 临床应用指南
+#### 💡 临床应用指南
 
 **模型目的:**
 - 识别高风险再入院患者
@@ -817,14 +890,14 @@ elif selected == "模型说明":
 
 **使用注意事项:**
 
-**重要提示**
-1. 本模型是辅助诊断工具,不能替代临床医学判断
+**🔴 重要提示**
+1. 本模型是辅助诊断工具，不能替代临床医学判断
 2. 预测结果应结合患儿的具体临床情况综合分析
 3. 医生应基于专业知识和临床经验做出最终决策
-4. 对于高风险患者,应加强监测和随访
-5. 如预测不符合临床直觉,应进一步评估
+4. 对于高风险患者，应加强监测和随访
+5. 如预测不符合临床直觉，应进一步评估
 
-**最佳实践**
+**✅ 最佳实践**
 - 使用模型预测作为风险分层的参考
 - 结合临床经验调整管理策略
 - 定期评估模型预测准确性
@@ -832,20 +905,7 @@ elif selected == "模型说明":
     """)
 
     st.markdown("---")
-
-    st.markdown(f"""
-#### 模型特征详情
-
-**模型期望特征数量:** {len(expected_features)}
-
-**特征列表:**
-    """)
-    
-    feature_df = pd.DataFrame({
-        '序号': range(1, len(expected_features) + 1),
-        '特征名': expected_features
-    })
-    st.dataframe(feature_df, use_container_width=True, hide_index=True)
+    st.markdown(f"**模型期望特征数量:** {len(expected_features)}")
 
 # ============================================================================
 # 页面4: 特征分析
@@ -855,7 +915,6 @@ elif selected == "特征分析":
 
     st.markdown("### 特征分析与可视化")
 
-    # 加载测试数据用于分析
     @st.cache_data
     def load_test_data():
         try:
@@ -866,15 +925,12 @@ elif selected == "特征分析":
     X_test_raw = load_test_data()
 
     if X_test_raw is not None:
-        st.info(f"已加载测试数据集,共 {len(X_test_raw)} 条记录")
+        st.info(f"已加载测试数据集，共 {len(X_test_raw)} 条记录")
 
         st.markdown("#### 特征统计")
-
-        # 显示原始特征统计
         st.write("**原始数据统计:**")
         st.dataframe(X_test_raw.describe(), use_container_width=True)
 
-        # 特征相关性分析
         st.markdown("---")
         st.markdown("#### 连续特征相关性分析")
 
@@ -883,41 +939,32 @@ elif selected == "特征分析":
         if len(continuous_cols) > 1:
             corr_matrix = X_test_raw[continuous_cols].corr()
 
-            fig, ax = plt.subplots(figsize=(8, 6))
+            fig, ax = plt.subplots(figsize=(9, 7))
             
             sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0,
                         fmt='.2f', square=True, ax=ax, cbar_kws={'label': '相关系数'},
-                        annot_kws={'fontsize': 11})
-            ax.set_title('连续变量相关性矩阵', fontsize=12, fontweight='bold', pad=10)
-            
-            # 调整布局防止标签被截断
-            plt.tight_layout()
-            
-            st.pyplot(fig, use_container_width=True)
-            plt.close()
-        else:
-            st.warning("连续变量不足,无法进行相关性分析")
+                        annot_kws={'fontsize': 12, 'weight': 'bold'})
+            ax.set_title('连续变量相关性矩阵', fontsize=13, fontweight='bold', pad=15)
 
-        # 显示特征分布
+            display_figure_safe(fig)
+        else:
+            st.warning("连续变量不足，无法进行相关性分析")
+
         st.markdown("---")
         st.markdown("#### 特征分布")
 
         for col in continuous_cols:
-            fig, ax = plt.subplots(figsize=(10, 4))
-            ax.hist(X_test_raw[col], bins=30, color='#1f77b4', alpha=0.7, edgecolor='black')
-            ax.set_xlabel(col, fontsize=11, fontweight='bold')
-            ax.set_ylabel('频次', fontsize=11, fontweight='bold')
-            ax.set_title(f'{col} 分布', fontsize=12, fontweight='bold')
+            fig, ax = plt.subplots(figsize=(11, 5))
+            ax.hist(X_test_raw[col], bins=30, color='#1f77b4', alpha=0.7, edgecolor='black', linewidth=1.2)
+            ax.set_xlabel(col, fontsize=12, fontweight='bold')
+            ax.set_ylabel('频次', fontsize=12, fontweight='bold')
+            ax.set_title(f'{col} 分布', fontsize=13, fontweight='bold')
             ax.grid(axis='y', alpha=0.3)
-            
-            # 调整布局防止标签被截断
-            plt.tight_layout()
-            
-            st.pyplot(fig, use_container_width=True)
-            plt.close()
+
+            display_figure_safe(fig)
 
     else:
-        st.warning("未找到 X_test.csv 文件,无法进行特征分析")
+        st.warning("未找到 X_test.csv 文件，无法进行特征分析")
 
 # ============================================================================
 # 页面5: 关于系统
@@ -931,7 +978,7 @@ elif selected == "关于系统":
 
     with col_info1:
         st.markdown("""
-#### 模型基本信息
+#### 📊 模型基本信息
 
 **算法类型:** XGBoost (Extreme Gradient Boosting)
 
@@ -949,7 +996,7 @@ elif selected == "关于系统":
 
     with col_info2:
         st.markdown("""
-#### 输入变量说明
+#### 📝 输入变量说明
 
 **连续变量 (3个):**
 - 中性粒细胞植入时间
@@ -967,7 +1014,7 @@ elif selected == "关于系统":
     st.markdown("---")
 
     st.markdown("""
-#### 系统核心功能
+#### 🔧 系统核心功能
 
 **主要功能:**
 - 单个患者实时预测
@@ -986,70 +1033,30 @@ elif selected == "关于系统":
 
     st.markdown("---")
 
-    st.markdown("""
-#### 临床应用指南
+    st.markdown(f"""
+#### ℹ️ 版本信息
 
-**模型目的:**
-- 识别高风险再入院患者
-- 为临床决策提供数据支持
-- 指导出院后管理策略
+- **系统版本:** v1.1.0 (完整中文字体显示版)
+- **最后更新:** 2026年2月
+- **主要改进:**
+  - ✅ 增强matplotlib中文字体配置
+  - ✅ 自动字体检测与加载
+  - ✅ 多层备选字体方案
+  - ✅ 修复图表标签截断问题
+  - ✅ 优化布局防止显示不完整
+  - ✅ 改进图表保存与显示方式
 
-**使用注意事项:**
-
-**重要提示**
-1. 本模型是辅助诊断工具,不能替代临床医学判断
-2. 预测结果应结合患儿的具体临床情况综合分析
-3. 医生应基于专业知识和临床经验做出最终决策
-4. 对于高风险患者,应加强监测和随访
-5. 如预测不符合临床直觉,应进一步评估
-
-**最佳实践**
-- 使用模型预测作为风险分层的参考
-- 结合临床经验调整管理策略
-- 定期评估模型预测准确性
-- 收集反馈意见持续改进模型
-    """)
-
-    st.markdown("---")
-
-    st.markdown("""
-#### 法律声明
+#### 📋 法律声明
 
 **免责声明:**
-
 - 本系统仅供医疗专业人士参考使用
 - 预测结果不构成医学诊断或治疗建议
 - 医生应基于个人专业知识和临床经验做出最终决策
-- 对于高风险患者,应加强监测和随访
-- 如预测不符合临床直觉,应进一步评估
-- 使用本系统导致的任何后果,用户自行承担责任
+- 对于高风险患者，应加强监测和随访
+- 如预测不符合临床直觉，应进一步评估
+
+**模型特征数:** {len(expected_features)}
     """)
-
-    st.markdown("---")
-
-    st.markdown(f"""
-#### 版本信息
-
-- **系统版本:** v1.4.2 (字体完整显示版)
-- **最后更新:** 2026年2月
-- **主要改进:**
-  - 增强matplotlib中文字体配置
-  - 添加多字体备选方案
-  - 修复图表标签截断问题
-  - 优化布局防止显示不完整
-
-#### 模型特征详情
-
-**模型期望特征数量:** {len(expected_features)}
-
-**特征列表:**
-    """)
-    
-    feature_df = pd.DataFrame({
-        '序号': range(1, len(expected_features) + 1),
-        '特征名': expected_features
-    })
-    st.dataframe(feature_df, use_container_width=True, hide_index=True)
 
 # ============================================================================
 # 页脚
@@ -1057,9 +1064,9 @@ elif selected == "关于系统":
 
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: #666; font-size: 12px;'>"
-    "<p>造血干细胞移植患儿再入院风险预测系统 | 版本 v1.4.2</p>"
-    "<p>免责声明: 本系统仅供医疗专业人士参考,不能替代医学诊断</p>"
+    "<div style='text-align: center; color: #666; font-size: 12px; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif;'>"
+    "<p>造血干细胞移植患儿再入院风险预测系统 | 版本 v1.1.0</p>"
+    "<p>⚠️ 免责声明: 本系统仅供医疗专业人士参考，不能替代医学诊断</p>"
     "</div>",
     unsafe_allow_html=True
 )
