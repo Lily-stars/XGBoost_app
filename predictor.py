@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-# ============================================================================
-# predictor.py (修复版 v1.5.0 - 完整中文字体显示)
-# ============================================================================
-
 import joblib
 import numpy as np
 import pandas as pd
@@ -11,13 +7,25 @@ import matplotlib.pyplot as plt
 import matplotlib
 import matplotlib.font_manager as fm
 import warnings
-import streamlit as st
+import streamlit as st  # 1. 先导入 streamlit
 from streamlit_option_menu import option_menu
 import seaborn as sns
 import os
-import tempfile
-from pathlib import Path
+import io
 
+# ============================================================================
+# 【关键修复】：st.set_page_config 必须是第一个运行的 streamlit 命令
+# ============================================================================
+st.set_page_config(
+    page_title="造血干细胞移植患儿再入院预测模型",
+    page_icon="🏥",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ============================================================================
+# 字体配置函数定义
+# ============================================================================
 def setup_matplotlib_fonts_enhanced():
     """
     增强的中文字体配置方案
@@ -1015,5 +1023,6 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
 
