@@ -1,4 +1,4 @@
-streamlit==1.40.0
+streamlit==1.31.1
 pandas==2.2.0
 numpy==1.26.4
 scikit-learn==1.4.2
@@ -9,5 +9,6 @@ shap==0.46.0
 matplotlib==3.9.0
 seaborn==0.13.2
 streamlit-option-menu==0.3.13
+
 
 
