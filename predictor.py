@@ -650,7 +650,7 @@ if selected == "预测中心":
                 ax.set_yticks(range(len(top_features)))
                 ax.set_yticklabels(top_features, fontsize=11)
                 ax.set_xlabel('累积SHAP值的绝对值', fontsize=12, fontweight='bold')
-                ax.set_title('Top 10 原始特征重要性 (SHAP)', fontsize=13, fontweight='bold', pad=15)
+                ax.set_title('Top 8 原始特征重要性 (SHAP)', fontsize=13, fontweight='bold', pad=15)
                 ax.invert_yaxis()
                 ax.grid(axis='x', alpha=0.3)
 
@@ -1033,3 +1033,4 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
