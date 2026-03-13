@@ -663,7 +663,7 @@ try:
     - 显示对本次预测影响最大的原始特征
     """)
 
-except Exception as e:
+except Exception as e:  # ✅ 必须有 except 块
     st.warning(f"SHAP分析出现问题: {str(e)}")
 
             # ============================================================================
@@ -1036,6 +1036,7 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
 
 
