@@ -607,43 +607,64 @@ if selected == "预测中心":
    - 若出现发热或不明原因不适，应及时就诊
 """)
 
-            # ============================================================================
-            # SHAP 特征解释
-            # ============================================================================
+          
+# ============================================================================
+# SHAP 特征解释
+# ============================================================================
 
-            st.markdown("---")
-            st.markdown("### 模型解释性分析 (SHAP)")
+st.markdown("---")
+st.markdown("### 模型解释性分析 (SHAP)")
 
-            try:
-                explainer = shap.TreeExplainer(model)
-                shap_values = explainer.shap_values(prediction_input)
-                
-                if isinstance(shap_values, list):
-                    shap_values_for_plot = shap_values[1]
-                else:
-                    shap_values_for_plot = shap_values
-                
-                feature_importance = np.abs(shap_values_for_plot).flatten()
-                feature_importance_sorted_idx = np.argsort(feature_importance)[-10:][::-1]
-                
-                fig, ax = plt.subplots(figsize=(11, 7))
-                top_features = [expected_features[i] for i in feature_importance_sorted_idx]
-                top_importance = feature_importance[feature_importance_sorted_idx]
-                
-                ax.barh(range(len(top_features)), top_importance, color='#1f77b4')
-                ax.set_yticks(range(len(top_features)))
-                ax.set_yticklabels(top_features, fontsize=11)
-                ax.set_xlabel('平均SHAP值的绝对值', fontsize=12, fontweight='bold')
-                ax.set_title('Top 10 特征重要性 (SHAP)', fontsize=13, fontweight='bold', pad=15)
-                ax.invert_yaxis()
-                ax.grid(axis='x', alpha=0.3)
+try:
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(prediction_input)
 
-                display_figure_safe(fig)
+    if isinstance(shap_values, list):
+        shap_values_for_plot = shap_values[1]
+    else:
+        shap_values_for_plot = shap_values
 
-                st.info("SHAP分析显示对本次预测影响最大的10个特征")
+    feature_importance = np.abs(shap_values_for_plot).flatten()
+    
+    # 合并同源特征
+    feature_groups = {}
+    for feature_idx, feature_name in enumerate(expected_features):
+        base_feature = None
+        for orig_feature in categorical_features + continuous_features:
+            if orig_feature in feature_name or feature_name.startswith(orig_feature):
+                base_feature = orig_feature
+                break
+        
+        if base_feature:
+            if base_feature not in feature_groups:
+                feature_groups[base_feature] = 0
+            feature_groups[base_feature] += feature_importance[feature_idx]
+    
+    # 排序并取前10个
+    sorted_items = sorted(feature_groups.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_features = [item[0] for item in sorted_items]
+    top_importance = [item[1] for item in sorted_items]
+    
+    fig, ax = plt.subplots(figsize=(11, 7))
+    ax.barh(range(len(top_features)), top_importance, color='#1f77b4')
+    ax.set_yticks(range(len(top_features)))
+    ax.set_yticklabels(top_features, fontsize=11)
+    ax.set_xlabel('累积SHAP值的绝对值', fontsize=12, fontweight='bold')
+    ax.set_title('Top 10 原始特征重要性 (SHAP)', fontsize=13, fontweight='bold', pad=15)
+    ax.invert_yaxis()
+    ax.grid(axis='x', alpha=0.3)
 
-            except Exception as e:
-                st.warning(f"SHAP分析出现问题: {str(e)}")
+    display_figure_safe(fig)
+
+    st.info("""
+    📊 **SHAP分析说明：**
+    - 分类变量经过独热编码后会产生多个特征
+    - 此图已合并同源特征的重要性值
+    - 显示对本次预测影响最大的原始特征
+    """)
+
+except Exception as e:
+    st.warning(f"SHAP分析出现问题: {str(e)}")
 
             # ============================================================================
             # 输入特征汇总表
@@ -1015,5 +1036,6 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
+
 
 
