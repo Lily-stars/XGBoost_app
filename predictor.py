@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # ============================================================================
-# predictor.py (修复版 v1.5.0 - 完整中文字体显示)
+# predictor.py (修复版 v1.0 - 完整中文字体显示)
 # ============================================================================
 
 import joblib
@@ -981,7 +981,7 @@ elif selected == "关于系统":
     st.markdown(f"""
 #### ℹ️ 版本信息
 
-- **系统版本:** v1.1.0 (完整中文字体显示版)
+- **系统版本:** v1.0 (完整中文字体显示版)
 - **最后更新:** 2026年2月
 - **主要改进:**
   - ✅ 增强matplotlib中文字体配置
@@ -1010,9 +1010,10 @@ elif selected == "关于系统":
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: #666; font-size: 12px; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"Microsoft YaHei\", sans-serif;'>"
-    "<p>造血干细胞移植患儿再入院风险预测系统 | 版本 v1.1.0</p>"
+    "<p>造血干细胞移植患儿再入院风险预测系统 | 版本 v1.0</p>"
     "<p>⚠️ 免责声明: 本系统仅供医疗专业人士参考，不能替代医学诊断</p>"
     "</div>",
     unsafe_allow_html=True
 )
+
 
