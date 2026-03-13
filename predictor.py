@@ -420,6 +420,7 @@ if selected == "预测中心":
     with col_predict:
         predict_button = st.button("进行预测", key="predict_btn", use_container_width=True)
 
+    # ✅ 主预测逻辑（最外层 try-except）
     if predict_button:
         try:
             # 准备数据
@@ -607,64 +608,63 @@ if selected == "预测中心":
    - 若出现发热或不明原因不适，应及时就诊
 """)
 
-          
-# ============================================================================
-# SHAP 特征解释
-# ============================================================================
+            # ============================================================================
+            # SHAP 特征解释
+            # ============================================================================
 
-st.markdown("---")
-st.markdown("### 模型解释性分析 (SHAP)")
+            st.markdown("---")
+            st.markdown("### 模型解释性分析 (SHAP)")
 
-try:
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(prediction_input)
+            try:
+                explainer = shap.TreeExplainer(model)
+                shap_values = explainer.shap_values(prediction_input)
 
-    if isinstance(shap_values, list):
-        shap_values_for_plot = shap_values[1]
-    else:
-        shap_values_for_plot = shap_values
+                if isinstance(shap_values, list):
+                    shap_values_for_plot = shap_values[1]
+                else:
+                    shap_values_for_plot = shap_values
 
-    feature_importance = np.abs(shap_values_for_plot).flatten()
-    
-    # 合并同源特征
-    feature_groups = {}
-    for feature_idx, feature_name in enumerate(expected_features):
-        base_feature = None
-        for orig_feature in categorical_features + continuous_features:
-            if orig_feature in feature_name or feature_name.startswith(orig_feature):
-                base_feature = orig_feature
-                break
-        
-        if base_feature:
-            if base_feature not in feature_groups:
-                feature_groups[base_feature] = 0
-            feature_groups[base_feature] += feature_importance[feature_idx]
-    
-    # 排序并取前10个
-    sorted_items = sorted(feature_groups.items(), key=lambda x: x[1], reverse=True)[:10]
-    top_features = [item[0] for item in sorted_items]
-    top_importance = [item[1] for item in sorted_items]
-    
-    fig, ax = plt.subplots(figsize=(11, 7))
-    ax.barh(range(len(top_features)), top_importance, color='#1f77b4')
-    ax.set_yticks(range(len(top_features)))
-    ax.set_yticklabels(top_features, fontsize=11)
-    ax.set_xlabel('累积SHAP值的绝对值', fontsize=12, fontweight='bold')
-    ax.set_title('Top 10 原始特征重要性 (SHAP)', fontsize=13, fontweight='bold', pad=15)
-    ax.invert_yaxis()
-    ax.grid(axis='x', alpha=0.3)
+                feature_importance = np.abs(shap_values_for_plot).flatten()
+                
+                # 合并同源特征
+                feature_groups = {}
+                for feature_idx, feature_name in enumerate(expected_features):
+                    base_feature = None
+                    for orig_feature in categorical_features + continuous_features:
+                        if orig_feature in feature_name or feature_name.startswith(orig_feature):
+                            base_feature = orig_feature
+                            break
+                    
+                    if base_feature:
+                        if base_feature not in feature_groups:
+                            feature_groups[base_feature] = 0
+                        feature_groups[base_feature] += feature_importance[feature_idx]
+                
+                # 排序并取前10个
+                sorted_items = sorted(feature_groups.items(), key=lambda x: x[1], reverse=True)[:10]
+                top_features = [item[0] for item in sorted_items]
+                top_importance = [item[1] for item in sorted_items]
+                
+                fig, ax = plt.subplots(figsize=(11, 7))
+                ax.barh(range(len(top_features)), top_importance, color='#1f77b4')
+                ax.set_yticks(range(len(top_features)))
+                ax.set_yticklabels(top_features, fontsize=11)
+                ax.set_xlabel('累积SHAP值的绝对值', fontsize=12, fontweight='bold')
+                ax.set_title('Top 10 原始特征重要性 (SHAP)', fontsize=13, fontweight='bold', pad=15)
+                ax.invert_yaxis()
+                ax.grid(axis='x', alpha=0.3)
 
-    display_figure_safe(fig)
+                display_figure_safe(fig)
 
-    st.info("""
-    📊 **SHAP分析说明：**
-    - 分类变量经过独热编码后会产生多个特征
-    - 此图已合并同源特征的重要性值
-    - 显示对本次预测影响最大的原始特征
-    """)
+                st.info("""
+                📊 **SHAP分析说明：**
+                - 分类变量经过独热编码后会产生多个特征
+                - 此图已合并同源特征的重要性值
+                - 显示对本次预测影响最大的原始特征
+                """)
 
-except Exception as e:  # ✅ 必须有 except 块
-    st.warning(f"SHAP分析出现问题: {str(e)}")
+            except Exception as e:
+                st.warning(f"SHAP分析出现问题: {str(e)}")
 
             # ============================================================================
             # 输入特征汇总表
@@ -979,7 +979,7 @@ elif selected == "关于系统":
 
     st.markdown("---")
 
-    st.markdown("""
+    st.markdown(f"""
 #### 🔧 系统核心功能
 
 **主要功能:**
@@ -995,15 +995,11 @@ elif selected == "关于系统":
 - 数据处理: Pandas, NumPy
 - 可视化: Matplotlib, Seaborn
 - 模型解释: SHAP
-    """)
 
-    st.markdown("---")
-
-    st.markdown(f"""
 #### ℹ️ 版本信息
 
 - **系统版本:** v1.0 (完整中文字体显示版)
-- **最后更新:** 2026年2月
+- **最后更新:** 2026年3月
 - **主要改进:**
   - ✅ 增强matplotlib中文字体配置
   - ✅ 自动字体检测与加载
@@ -1011,6 +1007,7 @@ elif selected == "关于系统":
   - ✅ 修复图表标签截断问题
   - ✅ 优化布局防止显示不完整
   - ✅ 改进图表保存与显示方式
+  - ✅ 修复 try-except 语法错误
 
 #### 📋 法律声明
 
@@ -1036,7 +1033,3 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True
 )
-
-
-
-
